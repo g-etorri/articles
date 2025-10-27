@@ -1,3 +1,3 @@
 # Articles
 
-Hello everyone! This repo is exclusively for my articles. I want to explain everything I study, whether for work or just for fun. Enjoy!
+Hey everyone! This repo is just for my articles. I share things I study for work or just for fun. Enjoy!
