@@ -1,5 +1,6 @@
 # About this repo
 
-Hi everyone, 
+Hi everyone,
 
-I’ll be doing tasks similar to the ones in the JNCIE-SP self-study book. They’re not the exact same tasks since I didn’t buy the official kit, but I’ll be following the same steps.
+So, in this repo I’ll be working on some tasks inspired by the JNCIE-SP self-study book. They’re not the exact same ones (I didn’t get the official kit), but the idea is pretty much the same. I’ll be using this space to practice, take notes, and share whatever I learn along the way.
+
