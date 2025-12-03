@@ -58,10 +58,6 @@ set firewall family inet filter filter-re term ALLOW-BGP then accept
 
 For our general utility protocols, we’re keeping security maxed out. We only permit traffic originating from the management slice, which is the 10.71.0.0/24 network. Our required services? We’re allowing NTP, SNMP, RADIUS, DNS, FTP, and SSH. And for the sake of completion, we’ll let Telnet slide in, but we all know that one’s retired. 
 ```
-set firewall family inet filter filter-re term ALLOW-NTP from source-address 10.71.0.0/24
-set firewall family inet filter filter-re term ALLOW-NTP from protocol udp
-set firewall family inet filter filter-re term ALLOW-NTP from port ntp
-set firewall family inet filter filter-re term ALLOW-NTP then accept
 set firewall family inet filter filter-re term ALLOW-SNMP from source-address 10.71.0.0/24
 set firewall family inet filter filter-re term ALLOW-SNMP from protocol udp
 set firewall family inet filter filter-re term ALLOW-SNMP from port snmp
@@ -87,6 +83,15 @@ set firewall family inet filter filter-re term ALLOW-FTP from protocol tcp
 set firewall family inet filter filter-re term ALLOW-FTP from port ftp
 set firewall family inet filter filter-re term ALLOW-FTP from port ftp-data
 set firewall family inet filter filter-re term ALLOW-FTP then accept
+```
+We need to pay a little more attention to NTP, the term NTP requires the inclusion of the router's loopback address. This is necessary because, when executing the "show ntp status" and "show ntp associations" commands, the router queries itself (https://supportportal.juniper.net/s/article/Junos-Why-does-the-Network-Time-Protocol-NTP-stop-working-if-a-loopback-firewall-filter-is-applied) to verify this information.
+```
+root@R1> show configuration firewall family inet filter filter-re term ALLOW-NTP | display set
+set firewall family inet filter filter-re term ALLOW-NTP from source-address 10.71.0.0/24
+set firewall family inet filter filter-re term ALLOW-NTP from source-address 10.0.0.1/32
+set firewall family inet filter filter-re term ALLOW-NTP from protocol udp
+set firewall family inet filter filter-re term ALLOW-NTP from port ntp
+set firewall family inet filter filter-re term ALLOW-NTP then accept
 ```
 
 To mitigate potential denial-of-service conditions, we will implement a policer to strictly rate-limit specific traffic types. We are limiting incoming ICMP and traceroute requests to 100 Kbps. This ensures the router can respond to diagnostic tools while preventing resource exhaustion.
