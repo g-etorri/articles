@@ -33,5 +33,5 @@ And we'll follow the parameters below:
 | R8 | ge-0/0/3.0 | 10.200.0.5/31 | link-local |
 | R8 | ge-0/0/2.0 | 10.200.0.19/31 | |
 
-Ok, the first thing to do is create de LACP interfaces, A.K.A. "ae" or aggregated ethernet interfaces. 
+Ok, the first thing to do is create the LACP interfaces, A.K.A. "ae" or aggregated ethernet interfaces. 
 So, we need to do this in the links of R1 to R2 and R5 to R6, let's go. 
