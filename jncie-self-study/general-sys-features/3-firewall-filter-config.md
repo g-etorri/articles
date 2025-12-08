@@ -96,7 +96,7 @@ set firewall family inet filter filter-re term ALLOW-FTP then accept
 We need to pay a little more attention to NTP.
 The NTP term requires us to include the router’s own loopback address. Why? Because when you run “show ntp status” or “show ntp associations”, the router actually queries itself to fetch that information.
 
-Yeah, that’s right — the box literally asks:
+Yeah, that’s right, the box literally asks:
 “Hey me, are you synchronized?”
 
 If the loopback isn’t allowed in the filter, this check fails, and NTP looks broken even if everything else is fine.
