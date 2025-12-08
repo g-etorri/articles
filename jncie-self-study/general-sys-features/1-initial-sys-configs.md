@@ -103,7 +103,7 @@ set system name-server 10.71.0.253
 set system time-zone America/Sao_Paulo
 set system ntp authentication-key 1 type md5
 set system ntp authentication-key 1 value l4b-ntp
-set system ntp server 10.171.0.253 key 1
+set system ntp server 10.71.0.253 key 1
 set system ntp trusted-key 1
 ```
 Let’s check if everything is working.
