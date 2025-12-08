@@ -8,7 +8,7 @@ We'll use the topology below:
 <img width="1211" height="747" alt="image" src="https://github.com/user-attachments/assets/51ef5469-08d4-4bed-a2d8-81fb1244a531" />
 
 And we'll follow the parameters below.
-Yeah, FACA FOFA address — or cute knife for the English speakers out there.
+Yeah, FACA FOFA address, or cute knife for the English speakers out there.
 Thanks, IPv6… always giving us these beautiful hexadecimal possibilites.
 | Router | Interface | IPv4 address | IPv6 address |
 | ------ | --------- | ------------ | ------------ |
@@ -165,7 +165,7 @@ Track Int   State         Speed   VRRP Int   Group   VR State      Current prio
 ge-0/0/2.0  up               1g   ge-0/0/0.110     1 master                 120
 ge-0/0/3.0  down             1g   ge-0/0/0.110     1 master                 120
 ```
-Now you get what I meant — I think hahaha.
+Now you get what I meant... I think hahaha.
 With one interface down, the priority value drops to 120.
 And if we disable the other backbone interface, it will drop to 90.
 Let’s check it out.
