@@ -19,8 +19,11 @@ https://github.com/Juniper/junoscriptorium/tree/master/library/juniper
 I’ll grab a few SLAX scripts from there and test them out. Yes, yes, I know... you were probably expecting more from this topic. But I have to confess something to you… I hate SLAX. Okay?
 
 Before testing anything, we need to transfer the script files into their specific directories on the router:
+
 Op scripts > /var/db/scripts/op
+
 Commit scripts > /var/db/scripts/commit
+
 Event scripts > /var/db/scripts/event
 
 Alright, let’s test an op script.
