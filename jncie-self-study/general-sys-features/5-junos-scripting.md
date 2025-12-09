@@ -13,6 +13,7 @@ These scripts give us flexible ways to customize outputs, automate tasks, and ge
 
 Now, listen… I don’t want to learn how to write SLAX scripts.
 I really don’t.
+
 So, with that mindset, I went searching for some ready-made scripts. Here’s the link:
 https://github.com/Juniper/junoscriptorium/tree/master/library/juniper
 
@@ -71,16 +72,21 @@ lo0.0                              inet     10.0.0.1
                                             fe80::523e:990f:fc00:500
 ```
 This is basically a “show interface terse” on steroids!
+
 I still need to filter out some junk in the output, but overall it works nicely.
 
 With this script, we can see the interface description, the local and remote IP addresses, and in the case of ae interfaces, we can even see the bundle members. For operational routines, this is gold. It gives you a compact but meaningful summary of the interface state, exactly what you want when you’re troubleshooting under pressure.
+
 Alright, now that you’ve seen the value of op scripts, let’s move on to commit scripts.
 
 Here’s the way to think about commit scripts: they act like automated rule enforcers.
+
 If you define an internal policy such as “In my network, we do NOT allow prefixes bigger than /24”, a commit script can enforce that rule by inspecting the candidate configuration. If you try to configure a /23, the script checks it and throws a warning on your screen before allowing or rejecting the commit.
 
 To demonstrate this, I’m going to use the script [interface-mask-check.slax](https://github.com/Juniper/junoscriptorium/blob/master/library/juniper/commit/interfaces/interface-mask-check/interface-mask-check.slax):
+
 This script does exactly what I described, it inspects interface configurations and warns you when an interface has a mask that violates your internal mask policy.
+
 Let’s go ahead and test it.
 ```
 root@R1> file copy ftp://lab:lab123@10.71.0.253/scripts/interface-mask-check.slax /var/db/scripts/commit/
@@ -110,9 +116,11 @@ on interface ge-0/0/5 unit 0
 configuration check succeeds
 ```
 Yeah, this one works perfectly! I know it’s probably one of the simplest scripts in the whole repo, but that’s exactly the point, it’s just to get the feel of how commit scripts behave.
+
 There are tons of other scripts available, and you can explore all of them in the link I shared earlier.
 
 Now let’s move to what I think is the coolest category of all:
+
 ✨ Event scripts! ✨
 
 These are awesome because they let you hook directly into Junos events and take action whenever something specific happens on the router. You can essentially turn logs into triggers. For example, when an interface goes down, you can generate a custom syslog message… or even fire off a brand-new SNMP trap that you created.
@@ -122,6 +130,7 @@ Let’s check out a practical example.
 We’ll use the script: [syslog-int-desc-on-link-change.slax](https://github.com/Juniper/junoscriptorium/blob/master/library/juniper/event/interfaces/syslog-int-desc-on-link-change/syslog-int-desc-on-link-change.slax)
 
 Event scripts behave a bit differently.
+
 In this case, the script creates a new syslog message every time a link changes state. And this message doesn’t just say “interface down”, it includes the interface and its description. That’s incredibly useful for operations, because you immediately see what service or customer is affected.
 
 Once we have this custom syslog event, we can go even further:
@@ -129,6 +138,7 @@ we can build an SNMP trap triggered by this exact message.
 This means you can notify your Zabbix with precise, enriched information, far better than a generic interface down trap.
 
 So, let’s continue with the steps.
+
 First, we copy the script, and now we need to activate it so Junos can actually use it.
 ```
 root@R1> file copy ftp://lab:lab123@10.71.0.253/scripts/syslog-int-desc-on-link-change.slax /var/db/scripts/event/
@@ -202,7 +212,9 @@ set event-options policy snmptrap_if_description then raise-trap
 With this in place, every time a link changes state, we’ll get a fresh syslog message and a brand-new SNMP TRAP fired off to our SRV1. Clean and simple.
 
 Alright, now let’s jump into the Python side of things.
+
 I’m going to use a script that disables any interface we choose.
+
 If you want to check out the code, take a look at [interface_disable.py](https://sipart.github.io/Junos_Python_Notes/):
 
 This script basically asks which interface you want to shut down, once you confirm, boom, it disables it.
@@ -239,7 +251,9 @@ gigether-options {
 And… voilà. Yeah, this one’s dangerous, no doubt about it. But if you use it wisely, it becomes a really powerful tool for day-to-day operations.
 
 So that’s everything I wanted to cover about scripting on Junos for now.
+
 Next up, we’ll dive into flow sampling and gRPC for Telemetry!!!
+
 And finally, we’ll get our IGP up and running to deliver some services to our pseudo-customers!
 
 Bye bye.
