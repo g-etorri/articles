@@ -97,7 +97,8 @@ root@R1:~ #
 Toma (BR moment), now it works!!! 
 
 Now we’re going to configure the DNS and NTP servers on all our routers.
-We also need to set the correct time zone. For the NTP server, let’s use MD5 authentication, and the key will be l4b-ntp:
+For DNS, I created a simple list of domains based on the routers’ interface names just to make life easier.
+For the NTP server, let’s use MD5 authentication, and the key will be l4b-ntp. We also need to set the correct time zone:
 ```
 set system name-server 10.71.0.253
 set system time-zone America/Sao_Paulo
@@ -106,9 +107,6 @@ set system ntp authentication-key 1 value l4b-ntp
 set system ntp server 10.71.0.253 key 1
 set system ntp trusted-key 1
 ```
-Let’s check if everything is working.
-
-For DNS, I created a simple list of domains based on the routers’ interface names just to make life easier.
 So let’s ping r2.fxp0.jncie.lab to confirm DNS resolution:
 ```
 root@R1> ping r2.fxp0.jncie.lab
