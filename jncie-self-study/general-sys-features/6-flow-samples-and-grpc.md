@@ -2,10 +2,11 @@
 
 Hello guys,
 
-Today, we'll configure the flow sampling in our R5, to capture some packtes from DC3 (This is a new guy in our topology, but I won"t introduce you now). 
+Today, we'll configure flow sampling on R5 to capture some packets from DC3 (this is a new addition to our topology, but I won't cover it right now).
 
-I'll use IPFIX to sent the flow samples to our SRV1, we'll configure a new interface between SRV1 and R5 for this communication. 
-So, first, we need to have communication with our SRV1, I have separated the network 10.10.11.0/24 for this, I have some plans to distribute a DNS server to our customer in this network also. But in this first moment, I'll use this network to communicate the R5 with the SRV1 and send the flow samples.
+I'll use IPFIX to send the flow samples to SRV1, which requires configuring a new interface between them.
+
+So, first, we need to establish connectivity with SRV1. I've set aside the network 10.10.11.0/24 for this purpose. I also have plans to deploy a DNS server for our customers on this network later on. However, for this lab, I'll use it strictly to connect R5 to SRV1 and export the flow samples.
 ```
 set interfaces ge-0/0/4 description to-SRV1/eth1
 set interfaces ge-0/0/4 unit 0 family inet address 10.10.11.1/24
@@ -21,15 +22,15 @@ PING 10.10.11.2 (10.10.11.2): 56 data bytes
 4 packets transmitted, 4 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 1.615/41.295/159.553/68.277 ms
 ```
-Ok, we have communication between them. 
-Now, we have to made some templates for the families, inet and inet6. 
-The configuration is as follows: 
+Alright, we’ve got connectivity!
 
-Each flow is considered active, if it was 30 seconds. So, we need 30 seconds of pings for this traffic is considered a flow. 
+Now, it's time to build the templates for the inet and inet6 families. Here is the logic we're going to use:
 
-Each flow is considered inactive if we no have this traffic for 180 seconds. So, for this traffic is considered active again after considered inactive, it need to be constant for 30 seconds.
+Active Timeout (30s): We’ll set this to 30 seconds. Basically, if a flow is long-lived (like a continuous stream), the router will export a record every 30 seconds to update the collector.
 
-We we'll make the same template configuration for the two families, let's go. 
+Inactive Timeout (180s): If the traffic stops and we hear silence for 180 seconds, the flow is considered dead (inactive) and flushed from the cache.
+
+We’re going to apply the same configuration for both families. Let’s do it.
 ```
 set services flow-monitoring version-ipfix template SRV1-IPv6-IPFIX flow-active-timeout 30
 set services flow-monitoring version-ipfix template SRV1-IPv6-IPFIX flow-inactive-timeout 180
@@ -38,11 +39,17 @@ set services flow-monitoring version-ipfix template SRV1-IPv4-IPFIX flow-active-
 set services flow-monitoring version-ipfix template SRV1-IPv4-IPFIX flow-inactive-timeout 180
 set services flow-monitoring version-ipfix template SRV1-IPv4-IPFIX ipv4-template
 ```
-Ok, we have the parameters of the template defined. Now, we need to made the configuration of the instance of sampling in the forwarding-options. 
-We'll define the rate of the sampling in 1000, so, 1 packet in 1000 will be sampled, and we can improve the perfomance of sampling setting this function for the PFE, it is called inline-jflow. With this, the sampling will be sent directly by the PFE!!!
+Alright, templates are defined! Now, let’s jump into forwarding-options to configure the sampling instance.
 
-Another parameter that will be particular in our project as the destination port, the inet samplings will be send for the 44321 UDP, and the inet6 samplings to the 46321 UDP. 
-With this in the mindset, we can go to the configuration. You can see that we need to specify the source address and the template here, but I think you understand this naturally considering you knowledge in Junos.
+We’re setting the sampling rate to 1000 (meaning 1 out of every 1000 packets gets picked). To keep performance tight, we’re going to offload this to the PFE using inline-jflow. This ensures the sampling happens directly in hardware—keeping our RE CPU happy!
+
+One specific detail for this project is how we handle destination ports:
+
+inet samples will be sent to UDP 44321
+
+inet6 samples go to UDP 46321
+
+With that in mind, let's look at the config. You’ll notice we need to specify the source address and map the templates here, but knowing you guys rely on Junos muscle memory, this should be second nature.
 ```
 set forwarding-options sampling instance to-SRV1 input rate 1000
 set forwarding-options sampling instance to-SRV1 family inet output flow-server 10.10.11.2 port 44321
@@ -54,7 +61,9 @@ set forwarding-options sampling instance to-SRV1 family inet6 output flow-server
 set forwarding-options sampling instance to-SRV1 family inet6 output flow-server 10.10.11.2 version-ipfix template SRV1-IPv6-IPFIX
 set forwarding-options sampling instance to-SRV1 family inet6 output inline-jflow source-address 10.0.0.5
 ```
-Ok, everything looks good now. But we need to associate this template for the FPC where the interface is present, and specify in which interface we want to collect the flows. 
+Everything looks solid so far. But for this to actually work, we need to tie the sampling instance to the FPC where our interface lives.
+
+Once that's done, we just need to specify on which interface we want to start collecting those flows.
 ```
 set interfaces ge-0/0/6 description to-DC3/ge-0/0/1
 set interfaces ge-0/0/6 unit 0 family inet sampling input
@@ -64,8 +73,9 @@ set interfaces ge-0/0/6 unit 0 family inet6 sampling input
 set interfaces ge-0/0/6 unit 0 family inet6 sampling output
 set chassis fpc 0 sampling-instance to-SRV1
 ```
-Ok, this way, we can see the flows arriving in the SRV1!
-Let's make some pings to see. 
+With this configuration, we can now see the flows arriving at SRV1!
+
+Let's send some pings to test it out.
 ```
 root@kvm:/usr/sbin# tcpdump -i eth1 'port 46321 or port 44321' -vvv -X
 tcpdump: listening on eth1, link-type EN10MB (Ethernet), capture size 262144 bytes
@@ -124,6 +134,186 @@ tcpdump: listening on eth1, link-type EN10MB (Ethernet), capture size 262144 byt
 4 packets received by filter
 0 packets dropped by kernel
 ```
-And... Voilâ, we are receiving the samplings of inet and inet6 also. In this lab I don't want to waste time with applications of IPFIX, so only a tcpdump for me is good. 
+And... Voila! We are receiving flow samples for both inet and inet6.
 
-Ok, now we are going for the telemetry... I want to learn more of telemetry for automation, and this is essential. 
+For this lab, I don't want to get bogged down setting up a fancy IPFIX collector application. A simple tcpdump is enough proof for me right now.
+
+Now, shifting gears to Telemetry.
+
+I really want to deep dive into telemetry for automation—it's absolutely essential these days.
+
+I’ve configured Telegraf on SRV1 to connect to R5 via gRPC and stream the data. Basically, Telegraf requests the info, and the router pushes it back.
+
+Now, I won’t write a full tutorial on configuring Telegraf (I'm not a Telegraf guru yet!), but I will share my input plugin configuration below. I'm using the gNMI plugin.
+
+First of all, you need to know what you actually want to [collect](https://apps.juniper.net/telemetry-explorer/).
+
+For demonstration purposes, I'll just grab the interface descriptions, but feel free to get creative. Let's go:
+```
+[[inputs.gnmi]]
+  addresses = ["10.0.0.5:43123"]
+  username = "telegraf"
+  password = "Telegraf123"
+
+  encoding = "proto"
+  redial = "10s"
+
+
+  [[inputs.gnmi.subscription]]
+    name = "interfaces_stats"
+    origin = "openconfig"
+    path = "/interfaces/interface/state/description"
+    subscription_mode = "sample"
+    sample_interval = "10s"
+```
+My Telegraf instance will connect to R5 on port 43123 using the credentials telegraf / Telegraf123. Obviously, we need to create this user on the router first.
+
+The input plugin is the piece of the puzzle that requests data from our router. It uses a Sensor Path to locate the data—think of this path as the modern equivalent of an SNMP OID. I'm setting it to pull data every 10 seconds.
+
+On the router side, we need to configure the user and the gRPC parameters.
+
+Note: Since this is just a lab environment, I’m skipping SSL to keep things simple. In the real world, please encrypt your telemetry traffic! But for now, a basic clear-text configuration will do.
+```
+set system login user telegraf class super-user
+set system login user telegraf authentication plain-text-password Telegraf123
+set system services extension-service request-response grpc clear-text port 43123
+set system services extension-service request-response grpc max-connections 15
+set system services extension-service request-response grpc skip-authentication
+set system services extension-service notification allow-clients address 10.10.11.2/32
+```
+
+Now, let's fire up Telegraf and start pulling this data:
+```
+root@kvm:/etc/telegraf# telegraf --config /etc/telegraf/telegraf.conf --debug
+2025-12-11T20:13:13Z W! Strict environment variable handling will be the new default starting with v1.38.0! If your configu                                                              ration works with strict handling or you don't use environment variables it is safe to ignore this warning. Otherwise pleas                                                              e explicitly add the --non-strict-env-handling flag!
+2025-12-11T20:13:13Z I! Loading config: /etc/telegraf/telegraf.conf
+...
+2025-12-11T20:13:13Z D! [inputs.gnmi] Connection to gNMI device 10.0.0.5:43123 established
+2025-12-11T20:13:23Z D! [outputs.file] Wrote batch of 52 metrics in 933.596µs
+2025-12-11T20:13:23Z D! [outputs.file] Buffer fullness: 0 / 10000 metrics
+^C2025-12-11T20:13:31Z D! [agent] Stopping service inputs
+2025-12-11T20:13:31Z D! [inputs.gnmi] Connection to gNMI device 10.0.0.5:43123 closed
+```
+No errors popped up, so it looks like smooth sailing! I'm assuming the data made it through.
+
+Let's take a look at the output file to confirm:
+```
+root@kvm:/etc/telegraf# cat /tmp/telemetry_junos.out | grep to-
+{"fields":{"description":"to-R6/ge-0/0/0"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/0","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-R6/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/1","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-R8/ge-0/0/2"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/2","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-R4/ge-0/0/3"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/3","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-SRV1/eth1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/4","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-DC2/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/5","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-DC3/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/6","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-R6/ae0"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ae0","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484099}
+{"fields":{"description":"to-R6/ge-0/0/0"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/0","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-R6/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/1","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-R8/ge-0/0/2"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/2","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-R4/ge-0/0/3"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/3","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-SRV1/eth1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/4","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-DC2/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/5","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-DC3/ge-0/0/1"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ge-0/0/6","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+{"fields":{"description":"to-R6/ae0"},"name":"interfaces_stats","tags":{"host":"kvm","name":"ae0","path":"/interfaces/interface","source":"10.0.0.5"},"timestamp":1765484109}
+root@kvm:/etc/telegraf# cat /tmp/telemetry_junos.out | grep to- | jq .
+{
+  "fields": {
+    "description": "to-R6/ge-0/0/0"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/0",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-R6/ge-0/0/1"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/1",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-R8/ge-0/0/2"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/2",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-R4/ge-0/0/3"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/3",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-SRV1/eth1"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/4",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-DC2/ge-0/0/1"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/5",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+{
+  "fields": {
+    "description": "to-DC3/ge-0/0/1"
+  },
+  "name": "interfaces_stats",
+  "tags": {
+    "host": "kvm",
+    "name": "ge-0/0/6",
+    "path": "/interfaces/interface",
+    "source": "10.0.0.5"
+  },
+  "timestamp": 1765484149
+}
+```
+Wooow!!! Data is flowing in perfectly! Now we are ready to collect all sorts of metrics to automate and monitor our routers.
+
+Honestly, the sky's the limit here. You can use your creativity to do wonderful things with telemetry. I’ve actually tried [OpenJTS](https://github.com/door7302/openjts)—it's an amazing tool and even comes with some pre-built templates to grab data from your gear.
+
+And with that, we’ve wrapped up the 'System Features' section of our JNCIE journey.
+
+Next stop: IGP configuration!!!
+
+See you in the next one, bye!
