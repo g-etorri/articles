@@ -663,6 +663,7 @@ inet.0: 58 destinations, 61 routes (58 active, 0 holddown, 0 hidden)
 * 0.0.0.0/0               Self                                    {64666} I
 ```
 Ok, you saw the problem? You saw the AS-PATH? 
+
 Yesss!!! This is the problem of using an aggregate route. If a BGP route contribute for the aggregate route, the attribute of AS-PATH are inherited by the route. And the protocol BGP drop this route identifying a routing loop, because it is receiving a route with his own AS. 
 
 To resolve this, we can change the aggregator attributes of this route, let me show you:
@@ -687,5 +688,259 @@ set policy-options policy-statement Export_DC2 term Default from route-filter 0.
 set policy-options policy-statement Export_DC2 term Default then accept
 set policy-options policy-statement Export_DC2 then reject
 ```
+
+Ok, 1/2 now. We need to make our IGP reach in DC2 right now. So, we need to leak these BGP routes from DC2 into IS-IS. Now we'll need to make a policy:
+R4 and R5:
+```
+set policy-options policy-statement redistribute-isis term BGP from protocol bgp
+set policy-options policy-statement redistribute-isis term BGP then accept
+set protocols isis export redistribute-isis
+```
+Now, we need to check our ISIS database to make sure if we are receiving the BGP routes:
+```
+R4.00-00 Sequence: 0x86f, Checksum: 0xc939, Lifetime: 1183 secs
+   IPV4 Unicast IS neighbor: R1.00            Metric:       10
+   IPV4 Unicast IS neighbor: R3.00            Metric:       10
+   IPV4 Unicast IS neighbor: R5.00            Metric:       10
+   IPV6 Unicast IS neighbor: R3.00            Metric:       10
+   IPV6 Unicast IS neighbor: R5.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.4/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.2/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.4/30    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::4/128 Metric:        0 Internal Up
+
+R5.00-00 Sequence: 0x868, Checksum: 0x8f1d, Lifetime: 1189 secs
+   IPV4 Unicast IS neighbor: R4.00            Metric:       10
+   IPV4 Unicast IS neighbor: R6.00            Metric:        5
+   IPV4 Unicast IS neighbor: R8.00            Metric:       10
+   IPV6 Unicast IS neighbor: R4.00            Metric:       10
+   IPV6 Unicast IS neighbor: R6.00            Metric:        5
+   IP IPV4 Unicast prefix: 10.0.0.5/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.16/31     Metric:        5 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.18/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.0/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::5/128 Metric:        0 Internal Up
+```
+Only the R5 are exporting the BGP routes into IS-IS, but why?
+
+I'll explain to you, after all, I'm writing this. 
+
+R5 was the first routing exporting this routes in the IGP, and the R4 installed the IS-IS routes in the routing table instead the routes received by BGP. That's because the ISIS routes have a lower preference than BGP:
+```
+root@R4> show route receive-protocol bgp 172.30.120.2
+
+inet.0: 58 destinations, 71 routes (58 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.0.0.102/32           172.30.120.2                            64666 I
+  172.30.120.0/30         172.30.120.2                            64666 I
+* 172.30.120.4/30         172.30.120.2                            64666 I
+  172.30.220.0/24         172.30.120.2                            64666 I
+  172.30.221.0/24         172.30.120.2                            64666 I
+  172.30.222.0/24         172.30.120.2                            64666 I
+  172.30.223.0/24         172.30.120.2                            64666 I
+  172.30.224.0/24         172.30.120.2                            64666 I
+  172.30.225.0/24         172.30.120.2                            64666 I
+  172.30.226.0/24         172.30.120.2                            64666 I
+  172.30.227.0/24         172.30.120.2                            64666 I
+  172.30.228.0/24         172.30.120.2                            64666 I
+  172.30.229.0/24         172.30.120.2                            64666 I
+
+iso.0: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.0: 24 destinations, 24 routes (24 active, 0 holddown, 0 hidden)
+
+root@R4> show route 10.0.0.102/32
+
+inet.0: 58 destinations, 71 routes (58 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.102/32      *[IS-IS/15] 00:14:18, metric 20
+                    >  to 10.200.0.15 via ge-0/0/3.0
+                    [BGP/170] 00:05:24, localpref 100
+                      AS path: 64666 I, validation-state: unverified
+                    >  to 172.30.120.2 via ge-0/0/1.0
+```
+To solve this, we can change de preference of BGP protocol, but only in the group of DC2. Let's set a preference value of 14 in both routers, to prevent this problem and have redundancy and load-balance of the traffic. 
+R4 and R5:
+```
+set protocols bgp group eBGP-AS64666-DC2 preference 14
+```
+Now, let's check if we are installing these routes and exporting to IGP:
+```
+root@R4> show bgp summary
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0
+                      13         12          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.30.120.2          64666         40         69       0       0       30:11 Establ
+  inet.0: 12/13/13/0
+
+
+root@R5> show bgp summary
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0
+                      13         12          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.30.120.6          64666         29         49       0       0       20:39 Establ
+  inet.0: 12/13/13/0
+
+R4.00-00 Sequence: 0x870, Checksum: 0xc47f, Lifetime: 1103 secs
+   IPV4 Unicast IS neighbor: R1.00            Metric:       10
+   IPV4 Unicast IS neighbor: R3.00            Metric:       10
+   IPV4 Unicast IS neighbor: R5.00            Metric:       10
+   IPV6 Unicast IS neighbor: R3.00            Metric:       10
+   IPV6 Unicast IS neighbor: R5.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.4/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.2/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.4/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::4/128 Metric:        0 Internal Up
+
+R5.00-00 Sequence: 0x868, Checksum: 0x8f1d, Lifetime: 854 secs
+   IPV4 Unicast IS neighbor: R4.00            Metric:       10
+   IPV4 Unicast IS neighbor: R6.00            Metric:        5
+   IPV4 Unicast IS neighbor: R8.00            Metric:       10
+   IPV6 Unicast IS neighbor: R4.00            Metric:       10
+   IPV6 Unicast IS neighbor: R6.00            Metric:        5
+   IP IPV4 Unicast prefix: 10.0.0.5/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.16/31     Metric:        5 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.18/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.0/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::5/128 Metric:        0 Internal Up
+```
+And... Success!!! Now, let's confirm if we have connectivity with everyone:
+```
+root@DC2> ping count 1 10.0.0.1
+PING 10.0.0.1 (10.0.0.1): 56 data bytes
+64 bytes from 10.0.0.1: icmp_seq=0 ttl=62 time=1.551 ms
+
+--- 10.0.0.1 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.551/1.551/1.551/0.000 ms
+
+root@DC2> ping count 1 10.0.0.2
+PING 10.0.0.2 (10.0.0.2): 56 data bytes
+64 bytes from 10.0.0.2: icmp_seq=0 ttl=61 time=1.984 ms
+
+--- 10.0.0.2 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.984/1.984/1.984/0.000 ms
+
+root@DC2> ping count 1 10.0.0.3
+PING 10.0.0.3 (10.0.0.3): 56 data bytes
+64 bytes from 10.0.0.3: icmp_seq=0 ttl=62 time=1.703 ms
+
+--- 10.0.0.3 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.703/1.703/1.703/0.000 ms
+
+root@DC2> ping count 1 10.0.0.4
+PING 10.0.0.4 (10.0.0.4): 56 data bytes
+64 bytes from 10.0.0.4: icmp_seq=0 ttl=64 time=0.846 ms
+
+--- 10.0.0.4 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 0.846/0.846/0.846/0.000 ms
+
+root@DC2> ping count 1 10.0.0.5
+PING 10.0.0.5 (10.0.0.5): 56 data bytes
+64 bytes from 10.0.0.5: icmp_seq=0 ttl=64 time=1.572 ms
+
+--- 10.0.0.5 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.572/1.572/1.572/0.000 ms
+
+root@DC2> ping count 1 10.0.0.6
+PING 10.0.0.6 (10.0.0.6): 56 data bytes
+64 bytes from 10.0.0.6: icmp_seq=0 ttl=63 time=1.796 ms
+
+--- 10.0.0.6 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.796/1.796/1.796/0.000 ms
+
+root@DC2> ping count 1 10.0.0.7
+PING 10.0.0.7 (10.0.0.7): 56 data bytes
+64 bytes from 10.0.0.7: icmp_seq=0 ttl=62 time=3.076 ms
+
+--- 10.0.0.7 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 3.076/3.076/3.076/0.000 ms
+
+root@DC2> ping count 1 10.0.0.8
+PING 10.0.0.8 (10.0.0.8): 56 data bytes
+64 bytes from 10.0.0.8: icmp_seq=0 ttl=63 time=2.024 ms
+
+--- 10.0.0.8 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.024/2.024/2.024/0.000 ms
+
+root@DC2> ping count 1 172.30.110.253
+PING 172.30.110.253 (172.30.110.253): 56 data bytes
+64 bytes from 172.30.110.253: icmp_seq=0 ttl=61 time=2.519 ms
+
+--- 172.30.110.253 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.519/2.519/2.519/0.000 ms
+
+root@DC2> ping count 1 172.30.111.253
+PING 172.30.111.253 (172.30.111.253): 56 data bytes
+64 bytes from 172.30.111.253: icmp_seq=0 ttl=61 time=2.774 ms
+
+--- 172.30.111.253 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.774/2.774/2.774/0.000 ms
+```
+Everything is ok!!! We have connectivity with all routers of our IGP, and with DC1 also!!!
+
+Now, let's go to DC3!
+
 
 
