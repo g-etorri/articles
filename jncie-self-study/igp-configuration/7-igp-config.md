@@ -632,6 +632,7 @@ Oh, I forget to say you about our AS, we'll have the AS 65020.
 
 Let's make the configuration of this DC now:
 R4:
+```
 set routing-options autonomous-system 65020
 set routing-options aggregate route 0.0.0.0/0 discard
 set protocols bgp group eBGP-AS64666-DC2 type external
@@ -643,9 +644,9 @@ set policy-options policy-statement Export_DC2 term Default from protocol aggreg
 set policy-options policy-statement Export_DC2 term Default from route-filter 0.0.0.0/0 exact
 set policy-options policy-statement Export_DC2 term Default then accept
 set policy-options policy-statement Export_DC2 then reject
-
+```
 But here we have a little problem, the default route are not active in DC2...
-
+```
 root@DC2> show route
 
 inet.0: 25 destinations, 25 routes (25 active, 0 holddown, 0 hidden)
@@ -660,7 +661,7 @@ root@R4> show route advertising-protocol bgp 172.30.120.2
 inet.0: 58 destinations, 61 routes (58 active, 0 holddown, 0 hidden)
   Prefix                  Nexthop              MED     Lclpref    AS path
 * 0.0.0.0/0               Self                                    {64666} I
-
+```
 Ok, you saw the problem? You saw the AS-PATH? 
 Yesss!!! This is the problem of using an aggregate route. If a BGP route contribute for the aggregate route, the attribute of AS-PATH are inherited by the route. And the protocol BGP drop this route identifying a routing loop, because it is receiving a route with his own AS. 
 
@@ -672,6 +673,7 @@ This way, this route is generated with the AS65020 and aggregator ID as the rout
 
 We must do this in R5 to have redundancy
 R5:
+```
 set routing-options autonomous-system 65020
 set routing-options aggregate route 0.0.0.0/0 as-path aggregator 65020 10.0.0.5
 set routing-options aggregate route 0.0.0.0/0 discard
@@ -684,6 +686,6 @@ set policy-options policy-statement Export_DC2 term Default from protocol aggreg
 set policy-options policy-statement Export_DC2 term Default from route-filter 0.0.0.0/0 exact
 set policy-options policy-statement Export_DC2 term Default then accept
 set policy-options policy-statement Export_DC2 then reject
-
+```
 
 
