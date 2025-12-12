@@ -140,7 +140,7 @@ For this lab, I don't want to get bogged down setting up a fancy IPFIX collector
 
 Now, shifting gears to Telemetry.
 
-I really want to deep dive into telemetry for automation—it's absolutely essential these days.
+I really want to deep dive into telemetry for automation, it's absolutely essential these days.
 
 I’ve configured Telegraf on SRV1 to connect to R5 via gRPC and stream the data. Basically, Telegraf requests the info, and the router pushes it back.
 
@@ -310,7 +310,7 @@ root@kvm:/etc/telegraf# cat /tmp/telemetry_junos.out | grep to- | jq .
 ```
 Wooow!!! Data is flowing in perfectly! Now we are ready to collect all sorts of metrics to automate and monitor our routers.
 
-Honestly, the sky's the limit here. You can use your creativity to do wonderful things with telemetry. I’ve actually tried [OpenJTS](https://github.com/door7302/openjts)—it's an amazing tool and even comes with some pre-built templates to grab data from your gear.
+Honestly, the sky's the limit here. You can use your creativity to do wonderful things with telemetry. I’ve actually tried [OpenJTS](https://github.com/door7302/openjts), it's an amazing tool and even comes with some pre-built templates to grab data from your gear.
 
 And with that, we’ve wrapped up the 'System Features' section of our JNCIE journey.
 
