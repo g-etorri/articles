@@ -6,7 +6,7 @@ Today, we'll configure flow sampling on R5 to capture some packets from DC3 (thi
 
 I'll use IPFIX to send the flow samples to SRV1, which requires configuring a new interface between them.
 
-So, first, we need to establish connectivity with SRV1. I've set aside the network 10.10.11.0/24 for this purpose. I also have plans to deploy a DNS server for our customers on this network later on. However, for this lab, I'll use it strictly to connect R5 to SRV1 and export the flow samples.
+So, first, we need to establish connectivity with SRV1. I've set aside the network 10.10.11.0/24 for this purpose. I also have plans to deploy a DNS server for our customers on this connection later on. However, for this lab, I'll use it strictly to connect R5 to SRV1 and export the flow samples.
 ```
 set interfaces ge-0/0/4 description to-SRV1/eth1
 set interfaces ge-0/0/4 unit 0 family inet address 10.10.11.1/24
