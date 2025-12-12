@@ -168,7 +168,7 @@ For demonstration purposes, I'll just grab the interface descriptions, but feel 
 ```
 My Telegraf instance will connect to R5 on port 43123 using the credentials telegraf / Telegraf123. Obviously, we need to create this user on the router first.
 
-The input plugin is the piece of the puzzle that requests data from our router. It uses a Sensor Path to locate the data—think of this path as the modern equivalent of an SNMP OID. I'm setting it to pull data every 10 seconds.
+The input plugin is the piece of the puzzle that requests data from our router. It uses a Sensor Path to locate the data, think of this path as the modern equivalent of an SNMP OID. I'm setting it to pull data every 10 seconds.
 
 On the router side, we need to configure the user and the gRPC parameters.
 
