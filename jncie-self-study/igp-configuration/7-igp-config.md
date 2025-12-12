@@ -507,3 +507,183 @@ round-trip min/avg/max/std-dev = 4.802/4.802/4.802/0.000 ms
 ```
 Now, everything is good!!! 
 
+Ok, but we don't have finished yet. 
+Let's finish the connection with our DCs!!!
+
+DC1 is ok, we have connections with him e two gateways with VRRP configured. But, our IGP can't reach the DC1. Let's solve this leaking the routes in the IGP on the two routers, R3 and R4 to have redundancy:
+R3:
+```
+set protocols isis interface ge-0/0/0.110 passive
+set protocols isis interface ge-0/0/0.111 passive
+```
+R4:
+```
+set protocols isis interface ge-0/0/0.110 passive
+set protocols isis interface ge-0/0/0.111 passive
+```
+Here we don't need any policy to export these routes, considering this routes are direct. So, we only need to set these interface as passive in IS-IS:
+
+Ok, let's check de ISIS database now:
+```
+root@R1> show isis database detail
+IS-IS level 1 link-state database:
+ISIS instance: Default, Routing Instance: master
+...
+R3.00-00 Sequence: 0x791, Checksum: 0xc47b, Lifetime: 1003 secs
+   IPV4 Unicast IS neighbor: R2.00            Metric:       10
+   IPV4 Unicast IS neighbor: R4.00            Metric:       10
+   IPV4 Unicast IS neighbor: R6.00            Metric:       10
+   IPV6 Unicast IS neighbor: R2.00            Metric:       10
+   IPV6 Unicast IS neighbor: R4.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.3/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.6/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.12/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::3/128 Metric:        0 Internal Up
+
+R4.00-00 Sequence: 0x86e, Checksum: 0xcf22, Lifetime: 1194 secs
+   IPV4 Unicast IS neighbor: R1.00            Metric:       10
+   IPV4 Unicast IS neighbor: R3.00            Metric:       10
+   IPV4 Unicast IS neighbor: R5.00            Metric:       10
+   IPV6 Unicast IS neighbor: R3.00            Metric:       10
+   IPV6 Unicast IS neighbor: R5.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.4/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.2/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::4/128 Metric:        0 Internal Up
+```
+And, ok!!! We are receiving this routes in IGP, let's check the connectivity:
+```
+root@DC1> ping count 1 10.0.0.1
+PING 10.0.0.1 (10.0.0.1): 56 data bytes
+64 bytes from 10.0.0.1: icmp_seq=0 ttl=63 time=2.809 ms
+
+--- 10.0.0.1 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.809/2.809/2.809/0.000 ms
+
+root@DC1> ping count 1 10.0.0.2
+PING 10.0.0.2 (10.0.0.2): 56 data bytes
+64 bytes from 10.0.0.2: icmp_seq=0 ttl=63 time=1.859 ms
+
+--- 10.0.0.2 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.859/1.859/1.859/0.000 ms
+
+root@DC1> ping count 1 10.0.0.3
+PING 10.0.0.3 (10.0.0.3): 56 data bytes
+64 bytes from 10.0.0.3: icmp_seq=0 ttl=64 time=1.135 ms
+
+--- 10.0.0.3 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.135/1.135/1.135/0.000 ms
+
+root@DC1> ping count 1 10.0.0.4
+PING 10.0.0.4 (10.0.0.4): 56 data bytes
+64 bytes from 10.0.0.4: icmp_seq=0 ttl=64 time=1.200 ms
+
+--- 10.0.0.4 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.200/1.200/1.200/0.000 ms
+
+root@DC1> ping count 1 10.0.0.5
+PING 10.0.0.5 (10.0.0.5): 56 data bytes
+64 bytes from 10.0.0.5: icmp_seq=0 ttl=63 time=2.975 ms
+
+--- 10.0.0.5 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.975/2.975/2.975/0.000 ms
+
+root@DC1> ping count 1 10.0.0.6
+PING 10.0.0.6 (10.0.0.6): 56 data bytes
+64 bytes from 10.0.0.6: icmp_seq=0 ttl=63 time=1.348 ms
+
+--- 10.0.0.6 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.348/1.348/1.348/0.000 ms
+
+root@DC1> ping count 1 10.0.0.7
+PING 10.0.0.7 (10.0.0.7): 56 data bytes
+64 bytes from 10.0.0.7: icmp_seq=0 ttl=62 time=2.031 ms
+
+--- 10.0.0.7 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.031/2.031/2.031/0.000 ms
+
+root@DC1> ping count 1 10.0.0.8
+PING 10.0.0.8 (10.0.0.8): 56 data bytes
+64 bytes from 10.0.0.8: icmp_seq=0 ttl=62 time=7.884 ms
+
+--- 10.0.0.8 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 7.884/7.884/7.884/0.000 ms
+```
+Success! 
+
+In DC2 we'll configure two BGP sessions, one in R4 and another in R5. We'll export only a default route for DC2.
+Generally in JNCIE we don't have permissions to use static routes, so, to create a default route I'll use an aggregate route. 
+
+Oh, I forget to say you about our AS, we'll have the AS 65020. 
+
+Let's make the configuration of this DC now:
+R4:
+set routing-options autonomous-system 65020
+set routing-options aggregate route 0.0.0.0/0 discard
+set protocols bgp group eBGP-AS64666-DC2 type external
+set protocols bgp group eBGP-AS64666-DC2 description eBGP-AS64666-DC2
+set protocols bgp group eBGP-AS64666-DC2 export Saida_DC2
+set protocols bgp group eBGP-AS64666-DC2 peer-as 64666
+set protocols bgp group eBGP-AS64666-DC2 neighbor 172.30.120.2 family inet unicast
+set policy-options policy-statement Export_DC2 term Default from protocol aggregate
+set policy-options policy-statement Export_DC2 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Export_DC2 term Default then accept
+set policy-options policy-statement Export_DC2 then reject
+
+But here we have a little problem, the default route are not active in DC2...
+
+root@DC2> show route
+
+inet.0: 25 destinations, 25 routes (25 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.102/32      *[Direct/0] 1w2d 00:50:51
+                    > via lo0.0
+
+But I'm exporting the default route for him:
+root@R4> show route advertising-protocol bgp 172.30.120.2
+
+inet.0: 58 destinations, 61 routes (58 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               Self                                    {64666} I
+
+Ok, you saw the problem? You saw the AS-PATH? 
+Yesss!!! This is the problem of using an aggregate route. If a BGP route contribute for the aggregate route, the attribute of AS-PATH are inherited by the route. And the protocol BGP drop this route identifying a routing loop, because it is receiving a route with his own AS. 
+
+To resolve this, we can change the aggregator attributes of this route, let me show you:
+
+set routing-options aggregate route 0.0.0.0/0 as-path aggregator 65020 10.0.0.4
+
+This way, this route is generated with the AS65020 and aggregator ID as the router ID of R4.
+
+We must do this in R5 to have redundancy
+R5:
+set routing-options autonomous-system 65020
+set routing-options aggregate route 0.0.0.0/0 as-path aggregator 65020 10.0.0.5
+set routing-options aggregate route 0.0.0.0/0 discard
+set protocols bgp group eBGP-AS64666-DC2 type external
+set protocols bgp group eBGP-AS64666-DC2 description eBGP-AS64666-DC2
+set protocols bgp group eBGP-AS64666-DC2 export Export_DC2
+set protocols bgp group eBGP-AS64666-DC2 peer-as 64666
+set protocols bgp group eBGP-AS64666-DC2 neighbor 172.30.120.6 family inet unicast
+set policy-options policy-statement Export_DC2 term Default from protocol aggregate
+set policy-options policy-statement Export_DC2 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Export_DC2 term Default then accept
+set policy-options policy-statement Export_DC2 then reject
+
+
+
