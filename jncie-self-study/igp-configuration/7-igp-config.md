@@ -942,5 +942,428 @@ Everything is ok!!! We have connectivity with all routers of our IGP, and with D
 
 Now, let's go to DC3!
 
+This DC will have inet6 also. So, we'll work with OSPFv3 to provide this. OSPFv3 speaks inet6 naturally, to make it speak inet we need to configure the realm ipv4-unicast. 
 
+So, let's go configure this on our R4 and R5:
+```
+set protocols ospf3 realm ipv4-unicast area 0.0.0.0 interface ge-0/0/5.0
+set protocols ospf3 area 0.0.0.0 interface ge-0/0/5.0
+```
+Simple, right? Everything is working, right? 
+So, so.
+We need to make everything reachable in our network, then, we need to leak the ospf routes into IS-IS and vice-versa. 
 
+Now, we'll made the configuration of the leak into IS-IS, but you can imagine the problem. Before, we saw the problem with the BGP routes leaked, the BGP preference is higher than IS-IS, and only one router was leaking the routes. 
+
+Here, we need to make the same thing. I'll make the configuration without change the preference to prove it: I'll add a new term in the redistribute policy. 
+```
+set policy-options policy-statement redistribute-isis term OSPF3 from protocol ospf3
+set policy-options policy-statement redistribute-isis term OSPF3 then accept
+```
+
+Let's check our IS-IS database:
+```
+R4.00-00 Sequence: 0xa4c, Checksum: 0x18a3, Lifetime: 1149 secs
+   IPV4 Unicast IS neighbor: R1.00            Metric:       10
+   IPV4 Unicast IS neighbor: R3.00            Metric:       10
+   IPV4 Unicast IS neighbor: R5.00            Metric:       10
+   IPV6 Unicast IS neighbor: R3.00            Metric:       10
+   IPV6 Unicast IS neighbor: R5.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.4/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.103/32      Metric:        1 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.2/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.4/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.4/30    Metric:        2 Internal Up
+   IP IPV4 Unicast prefix: 172.30.131.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.132.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.133.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.134.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.135.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.136.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.137.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.138.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.139.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::4/128 Metric:        0 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::103/128 Metric:        1 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:1::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:2::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:3::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:4::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:5::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:6::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:7::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:8::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:9::/80 Metric:        0 External Up
+
+R5.00-00 Sequence: 0xa42, Checksum: 0x5028, Lifetime: 1179 secs
+   IPV4 Unicast IS neighbor: R4.00            Metric:       10
+   IPV4 Unicast IS neighbor: R6.00            Metric:        5
+   IPV4 Unicast IS neighbor: R8.00            Metric:       10
+   IPV6 Unicast IS neighbor: R4.00            Metric:       10
+   IPV6 Unicast IS neighbor: R6.00            Metric:        5
+   IP IPV4 Unicast prefix: 10.0.0.5/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.103/32      Metric:        1 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.16/31     Metric:        5 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.18/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.0/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.0/30    Metric:        2 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::5/128 Metric:        0 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::103/128 Metric:        1 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:1::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:2::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:3::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:4::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:5::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:6::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:7::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:8::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:9::/80 Metric:        0 External Up
+```
+You can saw the inet routes aren't exported by R5. But you can ask yourself, and the inet6 routes? Why both routers are exporting these routes? 
+This happens because the wid-metrics-only changes the external inet routes in internal routes. Inet6 uses TLV 236 and are tagged with the External Bit. 
+
+So, let's change this preference to made this leak correctly.
+```
+set protocols ospf3 realm ipv4-unicast external-preference 13
+set protocols ospf3 external-preference 13
+```
+I am changing the both families to made an standard, I like these "gambiarras" a little bit beauty. 
+
+And, let's check the results!
+```
+R4.00-00 Sequence: 0xa4c, Checksum: 0x18a3, Lifetime: 419 secs
+   IPV4 Unicast IS neighbor: R1.00            Metric:       10
+   IPV4 Unicast IS neighbor: R3.00            Metric:       10
+   IPV4 Unicast IS neighbor: R5.00            Metric:       10
+   IPV6 Unicast IS neighbor: R3.00            Metric:       10
+   IPV6 Unicast IS neighbor: R5.00            Metric:       10
+   IP IPV4 Unicast prefix: 10.0.0.4/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.103/32      Metric:        1 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.2/31      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.10/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.110.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.111.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.4/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.4/30    Metric:        2 Internal Up
+   IP IPV4 Unicast prefix: 172.30.131.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.132.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.133.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.134.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.135.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.136.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.137.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.138.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.139.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::4/128 Metric:        0 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::103/128 Metric:        1 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:1::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:2::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:3::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:4::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:5::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:6::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:7::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:8::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:9::/80 Metric:        0 External Up
+
+R5.00-00 Sequence: 0xa43, Checksum: 0xea7b, Lifetime: 1188 secs
+   IPV4 Unicast IS neighbor: R4.00            Metric:       10
+   IPV4 Unicast IS neighbor: R6.00            Metric:        5
+   IPV4 Unicast IS neighbor: R8.00            Metric:       10
+   IPV6 Unicast IS neighbor: R4.00            Metric:       10
+   IPV6 Unicast IS neighbor: R6.00            Metric:        5
+   IP IPV4 Unicast prefix: 10.0.0.5/32        Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.102/32      Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.0.0.103/32      Metric:        1 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.14/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.16/31     Metric:        5 Internal Up
+   IP IPV4 Unicast prefix: 10.200.0.18/31     Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.120.0/30    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.130.0/30    Metric:        2 Internal Up
+   IP IPV4 Unicast prefix: 172.30.131.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.132.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.133.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.134.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.135.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.136.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.137.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.138.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.139.0/24    Metric:        0 Internal Up
+   IP IPV4 Unicast prefix: 172.30.220.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.221.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.222.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.223.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.224.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.225.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.226.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.227.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.228.0/24    Metric:       10 Internal Up
+   IP IPV4 Unicast prefix: 172.30.229.0/24    Metric:       10 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::5/128 Metric:        0 Internal Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa::103/128 Metric:        1 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:1::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:2::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:3::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:4::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:5::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:6::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:7::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:8::/80 Metric:        0 External Up
+   V6 IPV6 Unicast prefix: fd10:faca:f0fa:3:9::/80 Metric:        0 External Up
+```
+Now, both routers are exporting the correct prefixes. 
+
+But, we don't have connectivity yet. We need to leak the IS-IS routes into OSPFv3 domain. 
+
+We'll made a policy to do this. 
+```
+set policy-options policy-statement redistribute-ospf3 term ISIS from protocol isis
+set policy-options policy-statement redistribute-ospf3 term ISIS then accept
+```
+But, as you know, the OSPF is a dynamic protocol, that flood LSAs for the routers in the network. And now thinking more about this, I can deduce that you have imagined the routing-loop that we are having here...
+```
+root@R4> show route 10.0.0.0/24 active-path
+
+inet.0: 58 destinations, 73 routes (58 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.1/32        *[OSPF3/13] 00:06:33, metric 20, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+10.0.0.2/32        *[OSPF3/13] 00:06:33, metric 25, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+10.0.0.3/32        *[OSPF3/13] 00:06:33, metric 15, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+10.0.0.4/32        *[Direct/0] 3w0d 07:15:17
+                    >  via lo0.0
+10.0.0.5/32        *[IS-IS/15] 4d 06:50:18, metric 10
+                    >  to 10.200.0.15 via ge-0/0/3.0
+10.0.0.6/32        *[OSPF3/13] 00:06:33, metric 5, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+10.0.0.7/32        *[OSPF3/13] 00:06:33, metric 15, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+10.0.0.8/32        *[OSPF3/13] 00:06:33, metric 10, tag 0
+                    >  to 172.30.130.2 via ge-0/0/5.0
+```
+If the R5 are exporting ISIS routes into OSPFv3, and the OSPFv3 have a lower preference than ISIS, the R4 will prefer the OSPFv3 routes, right? And the R4 preferring the OSPFv3 routes in his routing table, will export theses routes into ISIS because he haves a policy that makes this, and R5 will install some routes by the R4 and the loop continues...
+
+Now, to avoid this, we can use the route tags! 
+We can tag the exported routes and reject these routes to avoid this loop. 
+
+Let's do it! 
+```
+set policy-options policy-statement redistribute-ospf3 term ISIS then tag 123
+set policy-options policy-statement import-ospf3 term drop-tag from protocol ospf3
+set policy-options policy-statement import-ospf3 term drop-tag from tag 123
+set policy-options policy-statement import-ospf3 term drop-tag then reject
+set protocols ospf3 realm ipv4-unicast import import-ospf3
+set protocols ospf3 import import-ospf3
+```
+This way, we are tagging the ISIS routes exported into OSPFv3, and rejecting them on the other router. So, loop avoided. 
+```
+root@R4> show route 10.0.0.0/24 active-path
+
+inet.0: 58 destinations, 61 routes (58 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.1/32        *[IS-IS/15] 4d 07:01:08, metric 10
+                    >  to 10.200.0.2 via ge-0/0/2.0
+10.0.0.2/32        *[IS-IS/15] 4d 07:01:08, metric 15
+                    >  to 10.200.0.2 via ge-0/0/2.0
+10.0.0.3/32        *[IS-IS/15] 4d 07:01:08, metric 10
+                    >  to 10.200.0.10 via ge-0/0/4.0
+10.0.0.4/32        *[Direct/0] 3w0d 07:26:07
+                    >  via lo0.0
+10.0.0.5/32        *[IS-IS/15] 4d 07:01:08, metric 10
+                    >  to 10.200.0.15 via ge-0/0/3.0
+10.0.0.6/32        *[IS-IS/15] 00:00:01, metric 15
+                    >  to 10.200.0.15 via ge-0/0/3.0
+10.0.0.7/32        *[IS-IS/15] 00:00:01, metric 25
+                       to 10.200.0.2 via ge-0/0/2.0
+                    >  to 10.200.0.15 via ge-0/0/3.0
+10.0.0.8/32        *[IS-IS/15] 00:00:01, metric 20
+                    >  to 10.200.0.2 via ge-0/0/2.0
+                       to 10.200.0.15 via ge-0/0/3.0
+
+root@R5> show route 10.0.0.0/24 active-path
+
+inet.0: 58 destinations, 61 routes (58 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.1/32        *[IS-IS/15] 4d 07:01:29, metric 20
+                       to 10.200.0.19 via ge-0/0/2.0
+                    >  to 10.200.0.14 via ge-0/0/3.0
+10.0.0.2/32        *[IS-IS/15] 4d 07:01:29, metric 25
+                       to 10.200.0.19 via ge-0/0/2.0
+                    >  to 10.200.0.14 via ge-0/0/3.0
+                       to 10.200.0.17 via ae0.0
+10.0.0.3/32        *[IS-IS/15] 4d 07:01:29, metric 15
+                    >  to 10.200.0.17 via ae0.0
+10.0.0.4/32        *[IS-IS/15] 4d 07:01:29, metric 10
+                    >  to 10.200.0.14 via ge-0/0/3.0
+10.0.0.5/32        *[Direct/0] 3w0d 06:45:04
+                    >  via lo0.0
+10.0.0.6/32        *[IS-IS/15] 4d 07:01:29, metric 5
+                    >  to 10.200.0.17 via ae0.0
+10.0.0.7/32        *[IS-IS/15] 4d 07:01:29, metric 15
+                    >  to 10.200.0.17 via ae0.0
+10.0.0.8/32        *[IS-IS/15] 4d 07:01:29, metric 10
+                    >  to 10.200.0.19 via ge-0/0/2.0
+```
+Ok, now technically we have connectivity between our DC3 and our backbone, but, we want to make the connectivity end to end, so, we need to export the BGP routes of the DC2 into the OSPFv3. 
+
+Now, this is easy, and we'll make the same thing that we made with ISIS routes, after this we can test the total connectivity!
+
+Let'go:
+```
+set policy-options policy-statement redistribute-ospf3 term BGP from protocol bgp
+set policy-options policy-statement redistribute-ospf3 term BGP then tag 123
+set policy-options policy-statement redistribute-ospf3 term BGP then accept
+```
+
+Ok, now we can do a ping test for the routers address:
+```
+root@DC3> ping count 1 10.0.0.1
+PING 10.0.0.1 (10.0.0.1): 56 data bytes
+64 bytes from 10.0.0.1: icmp_seq=0 ttl=63 time=4.011 ms
+
+--- 10.0.0.1 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 4.011/4.011/4.011/0.000 ms
+
+root@DC3> ping count 1 10.0.0.2
+PING 10.0.0.2 (10.0.0.2): 56 data bytes
+64 bytes from 10.0.0.2: icmp_seq=0 ttl=61 time=2.373 ms
+
+--- 10.0.0.2 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.373/2.373/2.373/0.000 ms
+
+root@DC3> ping count 1 10.0.0.3
+PING 10.0.0.3 (10.0.0.3): 56 data bytes
+64 bytes from 10.0.0.3: icmp_seq=0 ttl=62 time=1.416 ms
+
+--- 10.0.0.3 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.416/1.416/1.416/0.000 ms
+
+root@DC3> ping count 1 10.0.0.4
+PING 10.0.0.4 (10.0.0.4): 56 data bytes
+64 bytes from 10.0.0.4: icmp_seq=0 ttl=64 time=6.920 ms
+
+--- 10.0.0.4 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 6.920/6.920/6.920/0.000 ms
+
+root@DC3> ping count 1 10.0.0.5
+PING 10.0.0.5 (10.0.0.5): 56 data bytes
+64 bytes from 10.0.0.5: icmp_seq=0 ttl=64 time=1.619 ms
+
+--- 10.0.0.5 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.619/1.619/1.619/0.000 ms
+
+root@DC3> ping count 1 10.0.0.6
+PING 10.0.0.6 (10.0.0.6): 56 data bytes
+64 bytes from 10.0.0.6: icmp_seq=0 ttl=63 time=1.864 ms
+
+--- 10.0.0.6 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.864/1.864/1.864/0.000 ms
+
+root@DC3> ping count 1 10.0.0.7
+PING 10.0.0.7 (10.0.0.7): 56 data bytes
+64 bytes from 10.0.0.7: icmp_seq=0 ttl=61 time=2.298 ms
+
+--- 10.0.0.7 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.298/2.298/2.298/0.000 ms
+
+root@DC3> ping count 1 10.0.0.8
+PING 10.0.0.8 (10.0.0.8): 56 data bytes
+64 bytes from 10.0.0.8: icmp_seq=0 ttl=63 time=1.717 ms
+
+--- 10.0.0.8 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 1.717/1.717/1.717/0.000 ms
+
+root@DC3> ping count 1 10.0.0.102
+PING 10.0.0.102 (10.0.0.102): 56 data bytes
+64 bytes from 10.0.0.102: icmp_seq=0 ttl=63 time=80.355 ms
+
+--- 10.0.0.102 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 80.355/80.355/80.355/0.000 ms
+
+root@DC3> ping count 1 10.0.0.103
+PING 10.0.0.103 (10.0.0.103): 56 data bytes
+64 bytes from 10.0.0.103: icmp_seq=0 ttl=64 time=0.033 ms
+
+--- 10.0.0.103 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 0.033/0.033/0.033/0.000 ms
+
+root@DC3> ping count 1 172.30.110.253
+PING 172.30.110.253 (172.30.110.253): 56 data bytes
+64 bytes from 172.30.110.253: icmp_seq=0 ttl=62 time=2.150 ms
+
+--- 172.30.110.253 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.150/2.150/2.150/0.000 ms
+
+root@DC3> ping count 1 172.30.111.253
+PING 172.30.111.253 (172.30.111.253): 56 data bytes
+64 bytes from 172.30.111.253: icmp_seq=0 ttl=62 time=2.256 ms
+
+--- 172.30.111.253 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.256/2.256/2.256/0.000 ms
+
+root@DC3>
+```
+And now, we have the full conectivity in our backbone!
+
+So, with this we have our topology to delivery transit and other services to our customers, and sure, connect to some upstreams!
+
+In the next step, we'll configure our BGP topology, see you soon! 
