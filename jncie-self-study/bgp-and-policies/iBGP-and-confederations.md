@@ -1,1 +1,0 @@
-# iBGP and Confederation Configuration
