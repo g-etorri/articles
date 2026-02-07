@@ -28,6 +28,7 @@ Now, I'll follow the peering cases of every router.
 In the IX environment, we have two routers, and we need to establish the session with both of them, in R1 and R2: 
 The IX-1 have the IP 192.168.12.253 and the IX-2 192.168.12.254. Here we have a tip to give to you, always mark a community in the import policy, this way, we can handle the routes imported by this peering easily. 
 First, we need to configure the interfaces correctly:
+
 R1:
 ```
 set interfaces ge-0/0/5 description to-IX-LAB
