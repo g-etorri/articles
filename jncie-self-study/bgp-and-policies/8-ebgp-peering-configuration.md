@@ -12,7 +12,7 @@ First, we need the information to configure the interfaces, addresses and BGP pe
 | R2 | ge-0/0/5.120 | 192.168.12.2/24 | N/A | 120 | IX | 1620 |
 | R3 | ge-0/0/5.301 | 172.16.3.1/30 | link-local | 301 | Provider 2 | 65502 | 
 | R3 | ge-0/0/5.302 | 172.16.3.5/30 | IPv4 compatible | 302 | Provider 3 | 65503 |
-| R5 | ge-0/0/8.501 | 172.16.5.1/30 | fc09:c0:ffee:5::1/126 | 501 | Customer 5 | 64505 |
+| R5 | ge-0/0/8.501 | 172.16.5.1/30 | fc09:c0ff:ee05::1/126 | 501 | Customer 5 | 64505 |
 | R5 | ge-0/0/9.502 | 172.16.5.5/30 | N/A | 502 | Customer 5 | 64505 |
 | R6 | ge-0/0/8.601 | 172.16.6.1/30 | N/A | 601 | Customer 1 | 64501 |
 | R6 | ge-0/0/5.602 | 172.16.6.5/30 | N/A | 602 | Customer 2 | 64502 |
@@ -31,7 +31,7 @@ Now, I'll follow the peering cases of every router.
 
 In the IX environment, we have two routers, and we need to establish the session with both of them, in R1 and R2: 
 
-The IX-1 have the IP 192.168.12.253 and the IX-2 192.168.12.254. Here I have a tip to give to you, always mark a community in the import policy, this way, we can handle the routes imported by this peering easily. 
+The IX-1 have the IP 192.168.12.254 and the IX-2 192.168.12.252. Here I have a tip to give to you, always mark a community in the import policy, this way, we can handle the routes imported by this peering easily. 
 
 First, we need to configure the interfaces correctly:
 
@@ -509,4 +509,5 @@ PING 200.3.0.1 (200.3.0.1): 56 data bytes
 round-trip min/avg/max/stddev = 5.994/19.505/45.296/18.244 ms
 ```
 And... everything is working perfectly!!! 
+
 
