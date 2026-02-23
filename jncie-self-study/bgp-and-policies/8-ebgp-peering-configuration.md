@@ -396,4 +396,117 @@ And, this is a success! We can jump into the configuration with the P3.
 
 In this scenario, we'll use the IPv6 IPv4 compatible, or most knowly, the IPv4-mapped IPv6 address. You know what is this? A technique used to map 32-bit IPv4 addresses into the 128-bit IPv6 space, allowing IPv6-only applications to communicate with IPv4 nodes. The format is ::ffff:w.x.y.z, where w.x.y.z is the IPv4 address, we'll explore this now. 
 
+This time, in our BGP session we'll speak the family inet and the family inet6 using the BGP session in IPv6 only. And the IPv4-mapped IPv6 address will work as recursive next-hop, because the routes received will go with the next-hop ::ffff:w.x.y.z, look here:
+```
+set interfaces ge-0/0/6 description to-P3-1
+set interfaces ge-0/0/6 flexible-vlan-tagging
+set interfaces ge-0/0/6 unit 302 description Upstream-BGP
+set interfaces ge-0/0/6 unit 302 vlan-id 302
+set interfaces ge-0/0/6 unit 302 family inet address 172.16.3.5/30
+set interfaces ge-0/0/6 unit 302 family inet6 address ::ffff:172.16.3.5/126
+```
+The policies are similary with P2 policies:
+```
+set policy-options policy-statement Entrada-P3 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-P3 term 1 then community add P3
+set policy-options policy-statement Entrada-P3 term 1 then community add Provider
+set policy-options policy-statement Entrada-P3 term 1 then accept
+set policy-options policy-statement Entrada-P3 term 1v6 from route-filter 0::/0 prefix-length-range /32-/48
+set policy-options policy-statement Entrada-P3 term 1v6 then community add P3
+set policy-options policy-statement Entrada-P3 term 1v6 then community add Provider
+set policy-options policy-statement Entrada-P3 term 1v6 then accept
+set policy-options policy-statement Entrada-P3 then reject
+
+set policy-options policy-statement Saida-P3 term Customers from community Customer
+set policy-options policy-statement Saida-P3 term Customers then accept
+set policy-options policy-statement Saida-P3 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-P3 term DCs then accept
+set policy-options policy-statement Saida-P3 term v6 from route-filter fd10:faca:f0fa::/48 exact
+set policy-options policy-statement Saida-P3 term v6 then accept
+set policy-options policy-statement Saida-P3 then reject
+```
+The configuration of the BGP:
+```
+set protocols bgp group eBGP-AS65503-Provider3 type external
+set protocols bgp group eBGP-AS65503-Provider3 description eBGP-AS65503-Provider3
+set protocols bgp group eBGP-AS65503-Provider3 log-updown
+set protocols bgp group eBGP-AS65503-Provider3 import Entrada-P3
+set protocols bgp group eBGP-AS65503-Provider3 family inet unicast
+set protocols bgp group eBGP-AS65503-Provider3 family inet6 unicast
+set protocols bgp group eBGP-AS65503-Provider3 export Saida-P3
+set protocols bgp group eBGP-AS65503-Provider3 peer-as 65503
+set protocols bgp group eBGP-AS65503-Provider3 neighbor 172.16.3.6
+```
+This way, in the session with the 172.16.3.6, IPv6 routes also IPv6 routes are changed. Let's look the results:
+```
+root@R3> show route receive-protocol bgp 172.16.3.6 
+
+inet.0: 226 destinations, 233 routes (221 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 1.1.1.0/24              172.16.3.6                              65503 111 I
+* 8.8.8.0/24              172.16.3.6                              65503 888 I
+* 10.0.1.3/32             172.16.3.6                              65503 I
+* 200.3.0.0/24            172.16.3.6                              65503 I
+* 200.3.1.0/24            172.16.3.6                              65503 I
+* 200.3.2.0/24            172.16.3.6                              65503 I
+* 200.3.3.0/24            172.16.3.6                              65503 I
+* 200.3.4.0/24            172.16.3.6                              65503 I
+* 200.3.5.0/24            172.16.3.6                              65503 I
+* 200.3.6.0/24            172.16.3.6                              65503 I
+* 200.3.7.0/24            172.16.3.6                              65503 I
+* 200.3.8.0/24            172.16.3.6                              65503 I
+* 200.3.9.0/24            172.16.3.6                              65503 I
+* 200.3.10.0/24           172.16.3.6                              65503 I
+* 200.3.11.0/24           172.16.3.6                              65503 I
+* 200.3.12.0/24           172.16.3.6                              65503 I
+* 200.3.13.0/24           172.16.3.6                              65503 I
+* 200.3.14.0/24           172.16.3.6                              65503 I
+* 200.3.15.0/24           172.16.3.6                              65503 I
+* 200.3.16.0/24           172.16.3.6                              65503 I
+* 200.3.17.0/24           172.16.3.6                              65503 I
+* 200.3.18.0/24           172.16.3.6                              65503 I
+* 200.3.19.0/24           172.16.3.6                              65503 I
+* 200.3.20.0/24           172.16.3.6                              65503 I
+* 200.3.21.0/24           172.16.3.6                              65503 I
+* 200.3.22.0/24           172.16.3.6                              65503 I
+* 200.3.23.0/24           172.16.3.6                              65503 I
+* 200.3.24.0/24           172.16.3.6                              65503 I
+* 200.3.25.0/24           172.16.3.6                              65503 I
+* 200.3.26.0/24           172.16.3.6                              65503 I
+* 200.3.27.0/24           172.16.3.6                              65503 I
+* 200.3.28.0/24           172.16.3.6                              65503 I
+* 200.3.29.0/24           172.16.3.6                              65503 I
+* 200.3.30.0/24           172.16.3.6                              65503 I
+
+inet6.0: 35 destinations, 56 routes (35 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 2804:db8:111::/48       ::ffff:172.16.3.6                       65503 111 I
+* 2804:db8:888::/48       ::ffff:172.16.3.6                       65503 888 I
+* 2804:2003::/48          ::ffff:172.16.3.6                       65503 I
+```
+Remember the IPv4-mapped IPv6 address, the existence of that configuration active these routes. 
+
+Ok, everything looks good, but to confirm this, we need to check the connectivity:
+```
+root@R3> ping 2804:2003:: source fd10:faca:f0fa::3 
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::3 --> 2804:2003::
+16 bytes from 2804:2003::, icmp_seq=0 hlim=64 time=30.633 ms
+16 bytes from 2804:2003::, icmp_seq=1 hlim=64 time=231.248 ms
+16 bytes from 2804:2003::, icmp_seq=2 hlim=64 time=18.939 ms
+^C
+--- 2804:2003:: ping6 statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 18.939/93.607/231.248/97.444 ms
+
+root@R3> ping 200.3.0.1 source 172.17.0.3 
+PING 200.3.0.1 (200.3.0.1): 56 data bytes
+64 bytes from 200.3.0.1: icmp_seq=0 ttl=64 time=45.296 ms
+64 bytes from 200.3.0.1: icmp_seq=1 ttl=64 time=7.226 ms
+64 bytes from 200.3.0.1: icmp_seq=2 ttl=64 time=5.994 ms
+^C
+--- 200.3.0.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 5.994/19.505/45.296/18.244 ms
+```
+And... everything is working perfectly!!! 
 
