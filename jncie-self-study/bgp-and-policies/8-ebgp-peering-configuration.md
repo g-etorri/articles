@@ -4,6 +4,7 @@ Hello guys, today we`ll make de eBGP peering in our ASN. In this is our topology
 <img width="979" height="833" alt="image" src="https://github.com/user-attachments/assets/06333cff-6ecc-4727-aa40-53a288f4f13b" />
 
 For this task, we will do some particularities to practice our BGP handling. 
+
 First, we need the information to configure the interfaces, addresses and BGP peering, let`s check the table below:
 | Router | Interface | IPv4 Address | IPv6 Address | VLAN | Neighbor Role | Remote AS |
 | - | - | - | - | - | - | - | 
@@ -21,13 +22,17 @@ First, we need the information to configure the interfaces, addresses and BGP pe
 | R8 | ge-0/0/1.801 | 172.16.8.1/30 | N/A | 801 | Provider 1 | 65501 |
 
 For all sessions, we`ll need to log the state changes of the session in the logs. 
+
 So we need to apply the _log-updown_ in every session that we configure in our network. 
 
 And, in every session we need to receive only the routes bigger than /24 and less than /8, otherwise, we`ll reject the routes. 
 
 Now, I'll follow the peering cases of every router. 
+
 In the IX environment, we have two routers, and we need to establish the session with both of them, in R1 and R2: 
+
 The IX-1 have the IP 192.168.12.253 and the IX-2 192.168.12.254. Here I have a tip to give to you, always mark a community in the import policy, this way, we can handle the routes imported by this peering easily. 
+
 First, we need to configure the interfaces correctly:
 
 R1:
@@ -47,6 +52,7 @@ set interfaces ge-0/0/5 unit 120 vlan-id 120
 set interfaces ge-0/0/5 unit 120 family inet address 192.168.12.2/24
 ```
 Then, we can define the policy for this session, as I say before, we can start defining our communities (We'll create these communities in every router in our network):
+
 Let's create the generic communities, the blackhole community, and the peering role communities. 
 ```
 set policy-options community Customer members 65020:51
@@ -55,6 +61,7 @@ set policy-options community Provider members 65020:50
 set policy-options community Blackhole members 6450.:666
 ```
 In this step, we can make the blackhole community with a regex, this way we can inform the customer to export the routes with his own AS:666, and our routers will discard these routes.
+
 And, we can configure the specific community for each peering, to do more flexible policies. 
 ```
 set policy-options community C1 members 65020:64501
@@ -66,6 +73,7 @@ set policy-options community P3 members 65020:65503
 ```
 
 Ok, with this, we can go back to the policies and peerings. 
+
 For this situation, we'll accept all the routes between /8 and /24, and we'll add the IX community. Let's apply this policy in R1 and R2: 
 ```
 set policy-options policy-statement Entrada-IX term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
@@ -73,6 +81,7 @@ set policy-options policy-statement Entrada-IX term 1 then community add IX
 set policy-options policy-statement Entrada-IX term 1 then accept
 ```
 Now, we need to decide what we'll export to the IX, will be the Customers routes and our DCs' routes. 
+
 If you remember our past articles, you know that our DCs have the follow prefixes: DC1 - 172.17.1.0/24, DC2 - 172.17.2.0/24 and DC3 - 172.17.3.0/24. To summary the routes, we can aggregate these routes on the prefix 172.17.0.0/22. 
 ```
 set routing-options aggregate route 172.17.0.0/22 as-path aggregator 65020 10.0.0.1
@@ -90,6 +99,7 @@ set policy-options policy-statement Saida-IX then reject
 ```
 
 Now, we have defined our routing policies, and we can configure the peering finally. In this situation, we want to prefer to receive the download in R1, so, this way we can use MED in this case. Let's apply the MED 10 in the R2:
+
 R1:
 ```
 set protocols bgp group eBGP-IX-LAB type external
@@ -144,6 +154,7 @@ inet.0: 225 destinations, 277 routes (220 active, 0 holddown, 5 hidden)
   162.0.19.0/24           192.168.12.253                          1620 I
 ```
 Ok!!! We are receiving the networks of the most famous DNSs! 1.1.1.1 and 8.8.8.8. And some others prefixes. 
+
 And let's verify if our R2 are exporting the DC prefix with the metric 10:
 ```
 root@R2> show route advertising-protocol bgp 192.168.12.253 172.17.0.0/22 
@@ -154,6 +165,7 @@ inet.0: 225 destinations, 277 routes (220 active, 0 holddown, 5 hidden)
 ```
 
 Now, I have a idea, we can use the network 172.17.0.0/24 in our Routers, for connectivity tests only. 
+
 Let's configure the IP in lo0 accordingly, in R1 we'll configure the 172.17.0.1 and in R2 172.17.0.2, and so on in the other routers...
 ```
 set interfaces lo0 unit 0 family inet address 10.0.0.1/32 primary
@@ -236,6 +248,7 @@ set policy-options policy-statement Saida-P2 term DCs then accept
 set policy-options policy-statement Saida-P2 then reject
 ```
 Now, we need to configure the BGP session, but we have a problem here. We need to know what is the LLA of our neighbor. (Oh, but... how the neighbor knows our LLA? Because I made this to practice, it`s not obviously?!?)
+
 To find this, We can use the "monitor traffic" tool of Junos. 
 ```
 root@R3> monitor traffic interface ge-0/0/5.301 no-resolve detail 
@@ -350,5 +363,37 @@ inet6.0: 34 destinations, 55 routes (34 active, 0 holddown, 0 hidden)
   2804:db8:888::/48       fe80::205:8601:2d71:9500                65502 888 I
 * 2804:2002::/48          fe80::205:8601:2d71:9500                65502 I
 ```
+And, everything looks ok! But, let's test this. For our IPv6 peerings, let's export the fd10:faca:f0fa::/48, this way, we can test the connectivity with our loopbacks. So, we need to add one more term in our export policy:
+```
+set routing-options rib inet6.0 aggregate route fd10:faca:f0fa::/48 as-path aggregator 65020 10.0.0.3
+set policy-options policy-statement Saida-P2 term v6 from route-filter fd10:faca:f0fa::/48 exact
+set policy-options policy-statement Saida-P2 term v6 then accept
+```
+We can do this on all routers, similarly. 
+
+Now, it's time to check the connectivity between the routers:
+```
+root@R3> ping 200.2.0.1 source 172.17.0.3 
+PING 200.2.0.1 (200.2.0.1): 56 data bytes
+64 bytes from 200.2.0.1: icmp_seq=0 ttl=64 time=10.829 ms
+64 bytes from 200.2.0.1: icmp_seq=1 ttl=64 time=4.666 ms
+64 bytes from 200.2.0.1: icmp_seq=2 ttl=64 time=93.363 ms
+^C
+--- 200.2.0.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 4.666/36.286/93.363/40.438 ms
+root@R3> ping source fd10:faca:f0fa::3 2804:2002:: 
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::3 --> 2804:2002::
+16 bytes from 2804:2002::, icmp_seq=0 hlim=64 time=270.940 ms
+16 bytes from 2804:2002::, icmp_seq=1 hlim=64 time=45.279 ms
+16 bytes from 2804:2002::, icmp_seq=2 hlim=64 time=7.579 ms
+^C
+--- 2804:2002:: ping6 statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 7.579/107.933/270.940/116.287 ms
+```
+And, this is a success! We can jump into the configuration with the P3. 
+
+In this scenario, we'll use the IPv6 IPv4 compatible, or most knowly, the IPv4-mapped IPv6 address. You know what is this? A technique used to map 32-bit IPv4 addresses into the 128-bit IPv6 space, allowing IPv6-only applications to communicate with IPv4 nodes. The format is ::ffff:w.x.y.z, where w.x.y.z is the IPv4 address, we'll explore this now. 
 
 
