@@ -13,7 +13,7 @@ First, we need the information to configure the interfaces, addresses and BGP pe
 | R3 | ge-0/0/5.301 | 172.16.3.1/30 | link-local | 301 | Provider 2 | 65502 | 
 | R3 | ge-0/0/5.302 | 172.16.3.5/30 | IPv4 compatible | 302 | Provider 3 | 65503 |
 | R5 | ge-0/0/8.501 | 172.16.5.1/30 | fc09:c0:ffee:5::1/126 | 501 | Customer 5 | 64505 |
-| R5 | ge-0/0/9.502 | 172.16.5.5/30 | N/A | 502 | Customer 5 | 64505 |
+| R5 | ge-0/0/9.502 | 172.16.5.5/30 | fc09:c0:ffee:5::5/126 | 502 | Customer 5 | 64505 |
 | R6 | ge-0/0/8.601 | 172.16.6.1/30 | fc09:c0:ffee:6::1/126 | 601 | Customer 1 | 64501 |
 | R6 | ge-0/0/5.602 | 172.16.6.5/30 | N/A | 602 | Customer 2 | 64502 |
 | R6 | ge-0/0/9.603 | 172.16.6.9/30 | N/A | 603 | Customer 2 | 64502 |
@@ -569,15 +569,18 @@ set policy-options policy-statement Entrada-P1 term 1v6 then community add Provi
 set policy-options policy-statement Entrada-P1 term 1v6 then accept
 set policy-options policy-statement Entrada-P1 then reject
 
-set policy-options policy-statement Saida-P1 term Customers from community Customer
-set policy-options policy-statement Saida-P1 term Customers then accept
-set policy-options policy-statement Saida-P1 term DCs from route-filter 172.17.0.0/22 exact
-set policy-options policy-statement Saida-P1 term DCs then community add no-export
-set policy-options policy-statement Saida-P1 term DCs then accept
-set policy-options policy-statement Saida-P1 term v6 from route-filter fd10:faca:f0fa::/48 exact
-set policy-options policy-statement Saida-P1 term v6 then community add no-export
-set policy-options policy-statement Saida-P1 term v6 then accept
-set policy-options policy-statement Saida-P1 then reject
+set policy-options policy-statement Saida-C5 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-C5 term Default then accept
+set policy-options policy-statement Saida-C5 term General from community Customer
+set policy-options policy-statement Saida-C5 term General from community Provider
+set policy-options policy-statement Saida-C5 term General from community IX
+set policy-options policy-statement Saida-C5 term General then accept
+set policy-options policy-statement Saida-C5 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-C5 term DCs then accept
+set policy-options policy-statement Saida-C5 term v6 from protocol aggregate
+set policy-options policy-statement Saida-C5 term v6 from route-filter fd10:faca:f0fa::/48 exact
+set policy-options policy-statement Saida-C5 term v6 then accept
+set policy-options policy-statement Saida-C5 then reject
 ```
 And, let's to the BGP configuration:
 R7:
@@ -749,5 +752,124 @@ And... everything is ok!!!
 
 Let's go to the customers peering configuration! 
 
+In R5, we have the C5 connected in two different sites, and this customer have a backdoor link between the CEs. The Customer ask us to load-balancing the traffic between the links. 
+Another good practice that I've adopted is, not accept the default route from customers, after all, we are the upstream of them. 
 
+So, with this, let's make the configuration. In import policy, we'll reject the default route, accept only routes from AS64505 (The AS-PATH matching is to avoid problems, what if the customer export the route 8.8.8.8 with the blackhole community? You will install this route with the discard action, you know, right? In the real scenario, we'll use RPKI to accept routes from customers of our customer, but this is not the case), with the blackhole community. We'll add another type of community, a community that change de local-preference in our network to provide to customer some options of traffic engineering. If our customer export a prefix with the community Cust-LP-90, then our router will set the local-pref value to 90. The another two terms will accept the customer prefixes according to our intern policy, the customer prefixes will have a local-pref value of 600, after all, we need to sell our service hahah. 
+
+In export policy, we'll send our DFZ (With the routes installed from IX, Providers, Customers, and our aggregated route) and the default gateway (The default route was configured in previous chapters, do you remember that?). 
+```
+set policy-options policy-statement Entrada-C5 term deny-gw from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Entrada-C5 term deny-gw then reject
+set policy-options policy-statement Entrada-C5 term BH from as-path AS64505
+set policy-options policy-statement Entrada-C5 term BH from community Blackhole
+set policy-options policy-statement Entrada-C5 term BH from route-filter 0.0.0.0/0 upto /32
+set policy-options policy-statement Entrada-C5 term BH then next-hop discard
+set policy-options policy-statement Entrada-C5 term BH then accept
+set policy-options policy-statement Entrada-C5 term Baixa-LP from as-path AS64505
+set policy-options policy-statement Entrada-C5 term Baixa-LP from community Cust-LP-90
+set policy-options policy-statement Entrada-C5 term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C5 term Baixa-LP then local-preference 90
+set policy-options policy-statement Entrada-C5 term Baixa-LP then accept
+set policy-options policy-statement Entrada-C5 term 1 from as-path AS64505
+set policy-options policy-statement Entrada-C5 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C5 term 1 then local-preference 600
+set policy-options policy-statement Entrada-C5 term 1 then community add C5
+set policy-options policy-statement Entrada-C5 term 1 then community add Customer
+set policy-options policy-statement Entrada-C5 term 1 then accept
+set policy-options policy-statement Entrada-C5 term 1-v6 from as-path AS64505
+set policy-options policy-statement Entrada-C5 term 1-v6 from route-filter 0::/0 prefix-length-range /32-/48
+set policy-options policy-statement Entrada-C5 term 1-v6 then local-preference 600
+set policy-options policy-statement Entrada-C5 term 1-v6 then community add C5
+set policy-options policy-statement Entrada-C5 term 1-v6 then community add Customer
+set policy-options policy-statement Entrada-C5 term 1-v6 then accept
+set policy-options policy-statement Entrada-C5 then reject
+
+set policy-options policy-statement Saida-C5 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-C5 term Default then accept
+set policy-options policy-statement Saida-C5 term General from community Customer
+set policy-options policy-statement Saida-C5 term General from community Provider
+set policy-options policy-statement Saida-C5 term General from community IX
+set policy-options policy-statement Saida-C5 term General then accept
+set policy-options policy-statement Saida-C5 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-C5 term DCs then accept
+set policy-options policy-statement Saida-C5 then reject
+```
+With the policies defined, we can configure the BGP sessions. To permit the premisse of load-balancing, we need to configure the multipath.
+```
+set protocols bgp group eBGP-AS64505 type external
+set protocols bgp group eBGP-AS64505 description eBGP-AS64505
+set protocols bgp group eBGP-AS64505 log-updown
+set protocols bgp group eBGP-AS64505 damping
+set protocols bgp group eBGP-AS64505 import Entrada-C5
+set protocols bgp group eBGP-AS64505 export Saida-C5
+set protocols bgp group eBGP-AS64505 peer-as 64505
+set protocols bgp group eBGP-AS64505 multipath
+set protocols bgp group eBGP-AS64505 neighbor 172.16.5.2 family inet unicast
+set protocols bgp group eBGP-AS64505 neighbor fc09:c0:ffee:5::2 family inet6 unicast
+set protocols bgp group eBGP-AS64505 neighbor 172.16.5.6 family inet unicast
+set protocols bgp group eBGP-AS64505 neighbor fc09:c0:ffee:5::6 family inet6 unicast
+```
+But, this is sufficient to do the load-balancing? Let's check this:
+
+```
+root@R5> show route 201.5.0.0/24 active-path      
+
+inet.0: 231 destinations, 252 routes (226 active, 0 holddown, 8 hidden)
++ = Active Route, - = Last Active, * = Both
+
+201.5.0.0/24       *[BGP/170] 00:01:44, localpref 600, from 172.16.5.2
+                      AS path: 64505 I, validation-state: unverified
+                       to 172.16.5.2 via ge-0/0/8.501
+                    >  to 172.16.5.6 via ge-0/0/9.502
+
+root@R5> show route 2804:2015::/48 active-path    
+
+inet6.0: 41 destinations, 66 routes (38 active, 0 holddown, 8 hidden)
++ = Active Route, - = Last Active, * = Both
+
+2804:2015::/48     *[BGP/170] 00:01:47, localpref 600, from fc09:c0:ffee:5::2
+                      AS path: 64505 I, validation-state: unverified
+                       to fc09:c0:ffee:5::2 via ge-0/0/8.501
+                    >  to fc09:c0:ffee:5::6 via ge-0/0/9.502
+```
+We are receiving the routes from both CEs, but to check if the load-balancing are happen, we need to check our FIB:
+```
+root@R5> show route forwarding-table destination 201.5.0.0/24    
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+201.5.0.0/24       user     0 172.16.5.6         ucst      702    14 ge-0/0/9.502
+root@R5> show route forwarding-table destination 2804:2015::/48             
+Routing table: default.inet6
+Internet6:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+2804:2015::/48     user     0 fc09:c0:ffee:5::6  ucst      795     4 ge-0/0/9.502
+```
+And, we can see that only one interface are used to forward the traffic for these prefixes. 
+
+To do the load-balance, we need to make a policy and apply this in the forwarding-table. 
+```            
+set policy-options policy-statement load-balance then load-balance per-flow
+set routing-options forwarding-table export load-balance
+```
+With this, all the traffic will be load-balance in per-flow mode. Now, we can check the results: 
+```
+root@R5> show route forwarding-table destination 201.5.0.0/24 
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+201.5.0.0/24       user     0                    ulst  1048583    13
+                              172.16.5.2         ucst      698     4 ge-0/0/8.501
+                              172.16.5.6         ucst      702     4 ge-0/0/9.502
+
+root@R5> show route forwarding-table destination 2804:2015::/48 
+Routing table: default.inet6
+Internet6:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+2804:2015::/48     user     0                    ulst  1048578     2
+                              fc09:c0:ffee:5::2  ucst      705     4 ge-0/0/8.501
+                              fc09:c0:ffee:5::6  ucst      795     4 ge-0/0/9.502
+```
+And, now it's ok!!! We are load-balancing the traffic correctly, but we need to check the connectiviy to say that is 100%. 
 
