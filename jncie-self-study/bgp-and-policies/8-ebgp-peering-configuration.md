@@ -12,14 +12,14 @@ First, we need the information to configure the interfaces, addresses and BGP pe
 | R2 | ge-0/0/5.120 | 192.168.12.2/24 | N/A | 120 | IX | 1620 |
 | R3 | ge-0/0/5.301 | 172.16.3.1/30 | link-local | 301 | Provider 2 | 65502 | 
 | R3 | ge-0/0/5.302 | 172.16.3.5/30 | IPv4 compatible | 302 | Provider 3 | 65503 |
-| R5 | ge-0/0/8.501 | 172.16.5.1/30 | fc09:c0ff:ee05::1/126 | 501 | Customer 5 | 64505 |
+| R5 | ge-0/0/8.501 | 172.16.5.1/30 | fc09:c0:ffee:5::1/126 | 501 | Customer 5 | 64505 |
 | R5 | ge-0/0/9.502 | 172.16.5.5/30 | N/A | 502 | Customer 5 | 64505 |
-| R6 | ge-0/0/8.601 | 172.16.6.1/30 | N/A | 601 | Customer 1 | 64501 |
+| R6 | ge-0/0/8.601 | 172.16.6.1/30 | fc09:c0:ffee:6::1/126 | 601 | Customer 1 | 64501 |
 | R6 | ge-0/0/5.602 | 172.16.6.5/30 | N/A | 602 | Customer 2 | 64502 |
 | R6 | ge-0/0/9.603 | 172.16.6.9/30 | N/A | 603 | Customer 2 | 64502 |
-| R7 | ge-0/0/5.701 | 172.16.7.1/30 | N/A | 701 | Provider 1 | 65501 |
-| R7 | ge-0/0/1.702 | 172.16.7.5/30 | N/A | 702 | Customer 1 | 64501 |
-| R8 | ge-0/0/1.801 | 172.16.8.1/30 | N/A | 801 | Provider 1 | 65501 |
+| R7 | ge-0/0/5.701 | 172.16.7.1/30 | fc09:c0:ffee:7::1/126 | 701 | Provider 1 | 65501 |
+| R7 | ge-0/0/1.702 | 172.16.7.5/30 | fc09:c0:ffee:7::5/126 | 702 | Customer 1 | 64501 |
+| R8 | ge-0/0/1.801 | 172.16.8.1/30 | fc09:c0:ffee:8::1/126 | 801 | Provider 1 | 65501 |
 
 For all sessions, we`ll need to log the state changes of the session in the logs. 
 
@@ -509,5 +509,245 @@ PING 200.3.0.1 (200.3.0.1): 56 data bytes
 round-trip min/avg/max/stddev = 5.994/19.505/45.296/18.244 ms
 ```
 And... everything is working perfectly!!! 
+
+Now, let's configure our last Provider peering. 
+In R7 and R8 we have a connection with the Provider 1, or, simply P1. This is a common dual-stack connection. But, we need to learn something, if this won't in the kind of the session, will be in the policies haha. 
+
+In this case, in the import, we need to install ONLY routes of the AS65501, and reject the remaining. We also must prefer the upload via R8. 
+And, in the export, we must send the prefixes of our AS with the no-export well-known community (the customers prefixes will be exported normally), this way the P1 will not propagate our prefixes to the internet. 
+
+So, with the constraints defined, let's do that:
+
+First, we need to create an as-path do define a "matcher". We will use a regex to match only the routes originated by the AS65501
+```
+set policy-options as-path AS65501 .*65501
+```
+Ok, now we need to define the no-export community to add this in our prefixes:
+```
+set policy-options community no-export members no-export
+```
+With this, we can define our policies, let's go:
+
+R7:
+```
+set policy-options policy-statement Entrada-P1 term 1 from as-path AS65501
+set policy-options policy-statement Entrada-P1 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-P1 term 1 then community add P1
+set policy-options policy-statement Entrada-P1 term 1 then community add Provider
+set policy-options policy-statement Entrada-P1 term 1 then accept
+set policy-options policy-statement Entrada-P1 term 1v6 from as-path AS65501
+set policy-options policy-statement Entrada-P1 term 1v6 from route-filter 0::/0 prefix-length-range /32-/48
+set policy-options policy-statement Entrada-P1 term 1v6 then community add P1
+set policy-options policy-statement Entrada-P1 term 1v6 then community add Provider
+set policy-options policy-statement Entrada-P1 term 1v6 then accept
+set policy-options policy-statement Entrada-P1 then reject
+
+set policy-options policy-statement Saida-P1 term Customers from community Customer
+set policy-options policy-statement Saida-P1 term Customers then accept
+set policy-options policy-statement Saida-P1 term DCs from protocol aggregate
+set policy-options policy-statement Saida-P1 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-P1 term DCs then community add no-export
+set policy-options policy-statement Saida-P1 term DCs then accept
+set policy-options policy-statement Saida-P1 term v6 from route-filter fd10:faca:f0fa::/48 exact
+set policy-options policy-statement Saida-P1 term v6 then community add no-export
+set policy-options policy-statement Saida-P1 term v6 then accept
+set policy-options policy-statement Saida-P1 then reject
+```
+R8: You can note here, to direct the upload for the R8 session, we can use local-preference, I am setting the LP 
+```
+set policy-options policy-statement Entrada-P1 term 1 from as-path AS65501
+set policy-options policy-statement Entrada-P1 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-P1 term 1 then local-preference 200
+set policy-options policy-statement Entrada-P1 term 1 then community add P1
+set policy-options policy-statement Entrada-P1 term 1 then community add Provider
+set policy-options policy-statement Entrada-P1 term 1 then accept
+set policy-options policy-statement Entrada-P1 term 1v6 from as-path AS65501
+set policy-options policy-statement Entrada-P1 term 1v6 from route-filter 0::/0 prefix-length-range /32-/48
+set policy-options policy-statement Entrada-P1 term 1v6 then local-preference 200
+set policy-options policy-statement Entrada-P1 term 1v6 then community add P1
+set policy-options policy-statement Entrada-P1 term 1v6 then community add Provider
+set policy-options policy-statement Entrada-P1 term 1v6 then accept
+set policy-options policy-statement Entrada-P1 then reject
+
+set policy-options policy-statement Saida-P1 term Customers from community Customer
+set policy-options policy-statement Saida-P1 term Customers then accept
+set policy-options policy-statement Saida-P1 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-P1 term DCs then community add no-export
+set policy-options policy-statement Saida-P1 term DCs then accept
+set policy-options policy-statement Saida-P1 term v6 from route-filter fd10:faca:f0fa::/48 exact
+set policy-options policy-statement Saida-P1 term v6 then community add no-export
+set policy-options policy-statement Saida-P1 term v6 then accept
+set policy-options policy-statement Saida-P1 then reject
+```
+And, let's to the BGP configuration:
+R7:
+```
+set protocols bgp group eBGP-AS65501 type external
+set protocols bgp group eBGP-AS65501 description eBGP-AS65501
+set protocols bgp group eBGP-AS65501 log-updown
+set protocols bgp group eBGP-AS65501 import Entrada-P1
+set protocols bgp group eBGP-AS65501 export Saida-P1
+set protocols bgp group eBGP-AS65501 peer-as 65501
+set protocols bgp group eBGP-AS65501 neighbor 172.16.7.6 family inet unicast
+set protocols bgp group eBGP-AS65501 neighbor fc09:c0:ffee:7::2 family inet6 unicast
+```
+R8:
+```
+set protocols bgp group eBGP-AS65501 type external
+set protocols bgp group eBGP-AS65501 description eBGP-AS65501
+set protocols bgp group eBGP-AS65501 log-updown
+set protocols bgp group eBGP-AS65501 import Entrada-P1
+set protocols bgp group eBGP-AS65501 export Saida-P1
+set protocols bgp group eBGP-AS65501 peer-as 65501
+set protocols bgp group eBGP-AS65501 neighbor 172.16.8.2 family inet unicast
+set protocols bgp group eBGP-AS65501 neighbor fc09:c0:ffee:8::2 family inet6 unicast
+```
+
+Let's check the results:
+```
+root@R7> show bgp summary group eBGP-AS65501                            
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 4 Down peers: 1
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       0          0          0          0          0          0
+inet.0               
+                      53         31         20         20         40          0
+inet6.0              
+                       3          1          0          0          0          0
+bgp.mvpn.0           
+                       0          0          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.16.7.6            65501      27342      27024       0       0 1w1d 13:51:38 Establ
+  inet.0: 31/33/31/0
+fc09:c0:ffee:7::2       65501      27342      27021       0       0 1w1d 13:51:32 Establ
+  inet6.0: 1/3/1/0
+
+root@R8> show bgp summary group eBGP-AS65501 
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 4 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       1          1          0          0          0          0
+inet.0               
+                     156        153          0          0          0          0
+inet6.0              
+                      26          6          0          0          0          0
+bgp.l3vpn.0          
+                      15         15          0          0          0          0
+bgp.l3vpn-inet6.0    
+                       2          2          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.16.8.2            65501      27326      27179       0       0 1w1d 13:46:53 Establ
+  inet.0: 31/33/31/0
+fc09:c0:ffee:8::2       65501      27325      27157       0       0 1w1d 13:46:45 Establ
+  inet6.0: 1/3/1/0
+```
+Here you can see that the routes are active in both routers, this happens because we don't have configured our iBGP yet. In the next chapter of our journey, we'll configure this iBGP and the routes will become inactive. 
+
+But, let's desconsiderate this situation, the best thing to do is check if we are setting the local-pref value to 200 in R8:
+```
+root@R8> show route protocol bgp aspath-regex .*65501                 
+
+inet.0: 224 destinations, 228 routes (222 active, 0 holddown, 4 hidden)
++ = Active Route, - = Last Active, * = Both
+
+200.1.0.0/24       *[BGP/170] 1w1d 13:52:39, localpref 200
+                      AS path: 65501 I, validation-state: unverified
+                    >  to 172.16.8.2 via ge-0/0/1.801
+200.1.1.0/24       *[BGP/170] 1w1d 13:52:39, localpref 200
+                      AS path: 65501 I, validation-state: unverified
+                    >  to 172.16.8.2 via ge-0/0/1.801
+200.1.2.0/24       *[BGP/170] 1w1d 13:52:39, localpref 200
+                      AS path: 65501 I, validation-state: unverified
+                    >  to 172.16.8.2 via ge-0/0/1.801
+.........
+inet6.0: 34 destinations, 55 routes (34 active, 0 holddown, 2 hidden)
++ = Active Route, - = Last Active, * = Both
+
+2804:2001::/48     *[BGP/170] 1w1d 13:52:32, localpref 200
+                      AS path: 65501 I, validation-state: unverified
+                    >  to fc09:c0:ffee:8::2 via ge-0/0/1.801
+```
+And, this is ok!!! Let's check the communication to finish this. 
+```
+root@R7> ping 200.1.0.1 source 172.17.0.7 
+PING 200.1.0.1 (200.1.0.1): 56 data bytes
+64 bytes from 200.1.0.1: icmp_seq=0 ttl=63 time=137.147 ms
+64 bytes from 200.1.0.1: icmp_seq=1 ttl=63 time=39.417 ms
+^C
+--- 200.1.0.1 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 39.417/88.282/137.147/48.865 ms
+
+root@R7> ping 200.1.0.2 source 172.17.0.7    
+PING 200.1.0.2 (200.1.0.2): 56 data bytes
+64 bytes from 200.1.0.2: icmp_seq=0 ttl=64 time=8.113 ms
+64 bytes from 200.1.0.2: icmp_seq=1 ttl=64 time=9.562 ms
+^C
+--- 200.1.0.2 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 8.113/8.837/9.562/0.725 ms
+
+root@R7> ping 2804:2001::1 source fd10:faca:f0fa::7  
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::7 --> 2804:2001::1
+16 bytes from 2804:2001::1, icmp_seq=0 hlim=63 time=40.516 ms
+16 bytes from 2804:2001::1, icmp_seq=1 hlim=63 time=17.326 ms
+^C
+--- 2804:2001::1 ping6 statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 17.326/28.921/40.516/11.595 ms
+
+root@R7> ping 2804:2001::2 source fd10:faca:f0fa::7    
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::7 --> 2804:2001::2
+16 bytes from 2804:2001::2, icmp_seq=0 hlim=64 time=14.126 ms
+16 bytes from 2804:2001::2, icmp_seq=1 hlim=64 time=10.373 ms
+^C
+--- 2804:2001::2 ping6 statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 10.373/12.249/14.126/1.877 ms
+
+root@R8> ping 200.1.0.1 source 172.17.0.8  
+PING 200.1.0.1 (200.1.0.1): 56 data bytes
+64 bytes from 200.1.0.1: icmp_seq=0 ttl=64 time=19.371 ms
+64 bytes from 200.1.0.1: icmp_seq=1 ttl=64 time=188.420 ms
+^C
+--- 200.1.0.1 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 19.371/103.895/188.420/84.524 ms
+
+root@R8> ping 200.1.0.2 source 172.17.0.8    
+PING 200.1.0.2 (200.1.0.2): 56 data bytes
+64 bytes from 200.1.0.2: icmp_seq=0 ttl=63 time=37.143 ms
+64 bytes from 200.1.0.2: icmp_seq=1 ttl=63 time=46.719 ms
+^C
+--- 200.1.0.2 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 37.143/41.931/46.719/4.788 ms
+
+root@R8> ping 2804:2001::1 source fd10:faca:f0fa::8  
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::8 --> 2804:2001::1
+16 bytes from 2804:2001::1, icmp_seq=0 hlim=64 time=88.181 ms
+16 bytes from 2804:2001::1, icmp_seq=1 hlim=64 time=14.392 ms
+^C
+--- 2804:2001::1 ping6 statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 14.392/51.286/88.181/36.895 ms
+
+root@R8> ping 2804:2001::2 source fd10:faca:f0fa::8    
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::8 --> 2804:2001::2
+16 bytes from 2804:2001::2, icmp_seq=0 hlim=63 time=22.210 ms
+16 bytes from 2804:2001::2, icmp_seq=1 hlim=63 time=13.382 ms
+^C
+--- 2804:2001::2 ping6 statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 13.382/17.796/22.210/4.414 ms
+```
+And... everything is ok!!!
+
+Let's go to the customers peering configuration! 
+
 
 
