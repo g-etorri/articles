@@ -47,7 +47,7 @@ R2:
 ```
 set interfaces ge-0/0/5 description to-IX-LAB
 set interfaces ge-0/0/5 flexible-vlan-tagging
-set interfaces ge-0/0/5 unit 120 description ATM
+  set interfaces ge-0/0/5 unit 120 description IX
 set interfaces ge-0/0/5 unit 120 vlan-id 120
 set interfaces ge-0/0/5 unit 120 family inet address 192.168.12.2/24
 ```
