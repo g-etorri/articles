@@ -1,11 +1,11 @@
 # eBGP Peering Configuration
 
-Hello guys, today we`ll make de eBGP peering in our ASN. In this is our topology:
+Hello guys! Today we are going to configure eBGP peerings within our ASN. Here is our topology:
 <img width="979" height="833" alt="image" src="https://github.com/user-attachments/assets/06333cff-6ecc-4727-aa40-53a288f4f13b" />
 
 For this task, we will do some particularities to practice our BGP handling. 
 
-First, we need the information to configure the interfaces, addresses and BGP peering, let`s check the table below:
+First, we need to gather the information required to configure the interfaces, IP addressing, and BGP sessions. Please refer to the table below:
 | Router | Interface | IPv4 Address | IPv6 Address | VLAN | Neighbor Role | Remote AS |
 | - | - | - | - | - | - | - | 
 | R1 | ge-0/0/5.120 | 192.168.12.1/24 | N/A | 120 | IX | 1620 |
@@ -21,19 +21,19 @@ First, we need the information to configure the interfaces, addresses and BGP pe
 | R7 | ge-0/0/1.702 | 172.16.7.5/30 | fc09:c0:ffee:7::5/126 | 702 | Customer 1 | 64501 |
 | R8 | ge-0/0/1.801 | 172.16.8.1/30 | fc09:c0:ffee:8::1/126 | 801 | Provider 1 | 65501 |
 
-For all sessions, we`ll need to log the state changes of the session in the logs. 
+For all BGP sessions, we must ensure that state changes are recorded in the system logs. Therefore, we need to apply the log-updown command to every neighbor within our network.
 
-So we need to apply the _log-updown_ in every session that we configure in our network. 
+Additionally, we must implement a prefix filter for all sessions. We will only accept routes with a mask length greater than /8 and less than or equal to /24. Any routes falling outside this range will be rejected.
 
-And, in every session we need to receive only the routes bigger than /24 and less than /8, otherwise, we`ll reject the routes. 
+Let's start with the IX environment. We have two routers (R1 and R2) that need to establish sessions with two external peers:
 
-Now, I'll follow the peering cases of every router. 
+IX-1: 192.168.12.254
 
-In the IX environment, we have two routers, and we need to establish the session with both of them, in R1 and R2: 
+IX-2: 192.168.12.252
 
-The IX-1 have the IP 192.168.12.254 and the IX-2 192.168.12.252. Here I have a tip to give to you, always mark a community in the import policy, this way, we can handle the routes imported by this peering easily. 
+Pro Tip: Always tag imported routes with a specific BGP Community in your import policy. This best practice makes it much easier to manage and manipulate these routes later in your control plane.
 
-First, we need to configure the interfaces correctly:
+First, let’s configure the interfaces: Since the interface configuration follows a similar pattern across all routers in this lab, I will show the setup for R1 and R2, and omit the remaining interfaces for brevity.
 
 R1:
 ```
@@ -47,22 +47,22 @@ R2:
 ```
 set interfaces ge-0/0/5 description to-IX-LAB
 set interfaces ge-0/0/5 flexible-vlan-tagging
-  set interfaces ge-0/0/5 unit 120 description IX
+set interfaces ge-0/0/5 unit 120 description IX
 set interfaces ge-0/0/5 unit 120 vlan-id 120
 set interfaces ge-0/0/5 unit 120 family inet address 192.168.12.2/24
 ```
-Then, we can define the policy for this session, as I say before, we can start defining our communities (We'll create these communities in every router in our network):
+Next, we define the policies for these sessions. As mentioned, we’ll start by defining our BGP Communities. We will implement these across every router in our network to maintain consistency.
 
-Let's create the generic communities, the blackhole community, and the peering role communities. 
+Let’s create generic communities for role identification, including the Blackhole community and specific peering roles:
 ```
 set policy-options community Customer members 65020:51
 set policy-options community IX members 65020:1620
 set policy-options community Provider members 65020:50
 set policy-options community Blackhole members 6450.:666
 ```
-In this step, we can make the blackhole community with a regex, this way we can inform the customer to export the routes with his own AS:666, and our routers will discard these routes.
+Note on Blackhole Community: By using a Regular Expression (regex), we can identify blackhole requests from various customer ASNs (e.g., 64501:666, 64502:666). This allows our routers to dynamically identify and discard traffic based on the customer’s specific AS.
 
-And, we can configure the specific community for each peering, to do more flexible policies. 
+We can also configure granular communities for each neighbor to allow for more flexible routing policies:
 ```
 set policy-options community C1 members 65020:64501
 set policy-options community C2 members 65020:64502
@@ -72,17 +72,15 @@ set policy-options community P2 members 65020:65502
 set policy-options community P3 members 65020:65503
 ```
 
-Ok, with this, we can go back to the policies and peerings. 
-
-For this situation, we'll accept all the routes between /8 and /24, and we'll add the IX community. Let's apply this policy in R1 and R2: 
+For our IX peerings, we will accept all routes within the /8 to /24 range and tag them with the IX community.
 ```
 set policy-options policy-statement Entrada-IX term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
 set policy-options policy-statement Entrada-IX term 1 then community add IX
 set policy-options policy-statement Entrada-IX term 1 then accept
 ```
-Now, we need to decide what we'll export to the IX, will be the Customers routes and our DCs' routes. 
+Now, we need to define what we will advertise to the IX. We want to export our Customer routes and our Data Center (DC) prefixes.
 
-If you remember our past articles, you know that our DCs have the follow prefixes: DC1 - 172.17.1.0/24, DC2 - 172.17.2.0/24 and DC3 - 172.17.3.0/24. To summary the routes, we can aggregate these routes on the prefix 172.17.0.0/22. 
+As discussed in previous articles, our DC prefixes are 172.17.1.0/24, 172.17.2.0/24, and 172.17.3.0/24. To optimize our routing table, we will summarize these into a single /22 aggregate route.
 ```
 set routing-options aggregate route 172.17.0.0/22 as-path aggregator 65020 10.0.0.1
 set routing-options aggregate route 172.17.0.0/22 discard
@@ -98,7 +96,7 @@ set policy-options policy-statement Saida-IX term DCs then accept
 set policy-options policy-statement Saida-IX then reject
 ```
 
-Now, we have defined our routing policies, and we can configure the peering finally. In this situation, we want to prefer to receive the download in R1, so, this way we can use MED in this case. Let's apply the MED 10 in the R2:
+Finally, let’s apply the configuration to the BGP protocol. In this scenario, we want to influence inbound traffic to prefer R1 for downloads. To achieve this, we will use the MED attribute, applying a metric (10) on R2 to make it less preferred.
 
 R1:
 ```
@@ -114,6 +112,7 @@ set protocols bgp group eBGP-IX-LAB neighbor 192.168.12.253
 ```
 R2:
 ```
+set protocols bgp group eBGP-IX-LAB type external
 set protocols bgp group eBGP-IX-LAB description eBGP-IX-LAB
 set protocols bgp group eBGP-IX-LAB metric-out 10
 set protocols bgp group eBGP-IX-LAB log-updown
@@ -125,7 +124,7 @@ set protocols bgp group eBGP-IX-LAB neighbor 192.168.12.254
 set protocols bgp group eBGP-IX-LAB neighbor 192.168.12.253
 ```
 
-Let's verify what we receive in the IX;
+Now, let's verify what we are receiving from the IX. Running the command on R2, we can see the routes being learned:
 ```
 root@R2> show route receive-protocol bgp 192.168.12.253 
 
@@ -153,9 +152,9 @@ inet.0: 225 destinations, 277 routes (220 active, 0 holddown, 5 hidden)
   162.0.18.0/24           192.168.12.253                          1620 I
   162.0.19.0/24           192.168.12.253                          1620 I
 ```
-Ok!!! We are receiving the networks of the most famous DNSs! 1.1.1.1 and 8.8.8.8. And some others prefixes. 
+Everything looks correct! We are receiving prefixes from famous DNS providers (1.1.1.1 and 8.8.8.8) along with other IX prefixes.
 
-And let's verify if our R2 are exporting the DC prefix with the metric 10:
+Next, let's confirm that R2 is correctly exporting our aggregated DC prefix with a MED of 10:
 ```
 root@R2> show route advertising-protocol bgp 192.168.12.253 172.17.0.0/22 
 
@@ -164,21 +163,20 @@ inet.0: 225 destinations, 277 routes (220 active, 0 holddown, 5 hidden)
 * 172.17.0.0/22           Self                 10                 I
 ```
 
-Now, I have a idea, we can use the network 172.17.0.0/24 in our Routers, for connectivity tests only. 
+To perform connectivity tests, I'll assign addresses from the 172.17.0.0/24 range (which is part of our advertised aggregate) to the loopback interfaces of our routers. For instance, R1 will use .1 and R2 will use .2.
 
-Let's configure the IP in lo0 accordingly, in R1 we'll configure the 172.17.0.1 and in R2 172.17.0.2, and so on in the other routers...
+Note: We use the primary keyword on the main loopback address to ensure management traffic still uses our infrastructure IP.
 ```
 set interfaces lo0 unit 0 family inet address 10.0.0.1/32 primary
 set interfaces lo0 unit 0 family inet address 172.17.0.1/32
 ```
-This way, we can ping the IX-1 and IX-2 from R1 and R2:
+Now, we can verify end-to-end connectivity by pinging the IX peers using our new loopback address as the source:
 ```
 root@R1> ping source 172.17.0.1 162.0.1.1    
 PING 162.0.1.1 (162.0.1.1): 56 data bytes
 64 bytes from 162.0.1.1: icmp_seq=0 ttl=64 time=17.375 ms
 64 bytes from 162.0.1.1: icmp_seq=1 ttl=64 time=29.615 ms
 64 bytes from 162.0.1.1: icmp_seq=2 ttl=64 time=57.302 ms
-^C
 --- 162.0.1.1 ping statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 17.375/34.764/57.302/16.702 ms
@@ -189,7 +187,6 @@ PING 162.0.1.2 (162.0.1.2): 56 data bytes
 64 bytes from 162.0.1.2: icmp_seq=1 ttl=64 time=291.280 ms
 64 bytes from 162.0.1.2: icmp_seq=2 ttl=64 time=68.825 ms
 64 bytes from 162.0.1.2: icmp_seq=3 ttl=64 time=9.527 ms
-^C
 --- 162.0.1.2 ping statistics ---
 4 packets transmitted, 4 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 9.527/110.621/291.280/107.274 ms
@@ -199,7 +196,6 @@ PING 162.0.1.1 (162.0.1.1): 56 data bytes
 64 bytes from 162.0.1.1: icmp_seq=0 ttl=63 time=128.354 ms
 64 bytes from 162.0.1.1: icmp_seq=1 ttl=63 time=139.167 ms
 64 bytes from 162.0.1.1: icmp_seq=2 ttl=63 time=10.518 ms
-^C
 --- 162.0.1.1 ping statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 10.518/92.680/139.167/58.265 ms
@@ -210,17 +206,15 @@ PING 162.0.1.2 (162.0.1.2): 56 data bytes
 64 bytes from 162.0.1.2: icmp_seq=1 ttl=63 time=455.516 ms
 64 bytes from 162.0.1.2: icmp_seq=2 ttl=63 time=10.314 ms
 64 bytes from 162.0.1.2: icmp_seq=3 ttl=63 time=18.251 ms
-^C
 --- 162.0.1.2 ping statistics ---
 4 packets transmitted, 4 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 10.314/144.473/455.516/182.514 ms
 ```
-And... This is OK!!! We have much more peerings to configure, let's go. 
+Success! The peering is stable, policies are applied, and we have reachability. But we're just getting started—there are plenty of other peerings to configure. Let’s keep going!
 
-In R3, we have two upstream connections. With P2 we'll establish a common IPv4 session and a IPv6 session using the link-local address. But, how we can find the neighbor LLA? You'll see. 
-With P3 we'll establish a IPv6 session using the IPv4 compatible address. 
+In R3, we have two upstream connections. First, we will establish peering with P2 using two sessions: a standard IPv4 session and an IPv6 session using Link-Local Addresses (LLA).
 
-First, let's establish the session with P2. The interface configuration is common, but we need to configure the family inet6 on the interface, to permit the IPv6 packets here. 
+The interface configuration is straightforward, but we must enable family inet6 to allow IPv6 traffic on the unit:
 ```
 set interfaces ge-0/0/5 description to-P2-1
 set interfaces ge-0/0/5 flexible-vlan-tagging
@@ -229,7 +223,7 @@ set interfaces ge-0/0/5 unit 301 vlan-id 301
 set interfaces ge-0/0/5 unit 301 family inet address 172.16.3.1/30
 set interfaces ge-0/0/5 unit 301 family inet6
 ```
-The policies, we'll follow our standard. We must accept only prefixes between /8 to /24, and mark these prefixes with the due communities, and we'll export our aggregate prefix of our DCs networks and Router IP for test purposes. 
+Following our standard, we will accept only prefixes within the /8 to /24 range (IPv4) and /32 to /48 (IPv6), tagging them with the appropriate communities. We will also export our aggregated DC networks and our testing loopbacks.
 ```
 set policy-options policy-statement Entrada-P2 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
 set policy-options policy-statement Entrada-P2 term 1 then community add P2
@@ -247,9 +241,7 @@ set policy-options policy-statement Saida-P2 term DCs from route-filter 172.17.0
 set policy-options policy-statement Saida-P2 term DCs then accept
 set policy-options policy-statement Saida-P2 then reject
 ```
-Now, we need to configure the BGP session, but we have a problem here. We need to know what is the LLA of our neighbor. (Oh, but... how the neighbor knows our LLA? Because I made this to practice, it`s not obviously?!?)
-
-To find this, We can use the "monitor traffic" tool of Junos. 
+Since we are using Link-Local addresses for the IPv6 peering, we need to know the neighbor's fe80:: address. A great way to find this in Junos without documentation is using the monitor traffic tool to sniff the BGP Open messages:
 ```
 root@R3> monitor traffic interface ge-0/0/5.301 no-resolve detail 
 Address resolution is OFF.
@@ -274,7 +266,8 @@ Listening on ge-0/0/5.301, capture size 1578 bytes
                  4 Byte AS 65502
 ...
 ```
-In our interfaces we are receiving the packets from fe80::205:8601:2d71:9500. So, let's made the configuration now:
+The capture shows the neighbor's LLA as fe80::205:8601:2d71:9500. Now we can complete the BGP configuration.
+Note that for LLA neighbors, you must specify the local-interface. 
 ```
 set protocols bgp group eBGP-AS65502-Provider2 type external
 set protocols bgp group eBGP-AS65502-Provider2 description eBGP-AS65502-Provider2
@@ -316,7 +309,9 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 fe80::205:8601:2d71:9500%ge-0/0/5.301       65502          7          3       0       1           3 Establ
   inet6.0: 1/3/3/0
 ```
-Ok, both sessions are established and we are receiving routes, let's check which:
+Both sessions are now established. 
+
+Let's verify the received routes and test connectivity using our loopbacks:
 ```
 root@R3> show route receive-protocol bgp 172.16.3.2 table inet.0                  
 
@@ -363,7 +358,7 @@ inet6.0: 34 destinations, 55 routes (34 active, 0 holddown, 0 hidden)
   2804:db8:888::/48       fe80::205:8601:2d71:9500                65502 888 I
 * 2804:2002::/48          fe80::205:8601:2d71:9500                65502 I
 ```
-And, everything looks ok! But, let's test this. For our IPv6 peerings, let's export the fd10:faca:f0fa::/48, this way, we can test the connectivity with our loopbacks. So, we need to add one more term in our export policy:
+And everything seems fine! But let's test this. For our IPv6 peerings, we will export fd10:faca:f0fa::/48, this way we can test connectivity with our loopbacks. Therefore, we need to add one more term to our export policy:
 ```
 set routing-options rib inet6.0 aggregate route fd10:faca:f0fa::/48 as-path aggregator 65020 10.0.0.3
 set policy-options policy-statement Saida-P2 term v6 from route-filter fd10:faca:f0fa::/48 exact
@@ -378,25 +373,26 @@ PING 200.2.0.1 (200.2.0.1): 56 data bytes
 64 bytes from 200.2.0.1: icmp_seq=0 ttl=64 time=10.829 ms
 64 bytes from 200.2.0.1: icmp_seq=1 ttl=64 time=4.666 ms
 64 bytes from 200.2.0.1: icmp_seq=2 ttl=64 time=93.363 ms
-^C
 --- 200.2.0.1 ping statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 4.666/36.286/93.363/40.438 ms
+
 root@R3> ping source fd10:faca:f0fa::3 2804:2002:: 
 PING6(56=40+8+8 bytes) fd10:faca:f0fa::3 --> 2804:2002::
 16 bytes from 2804:2002::, icmp_seq=0 hlim=64 time=270.940 ms
 16 bytes from 2804:2002::, icmp_seq=1 hlim=64 time=45.279 ms
 16 bytes from 2804:2002::, icmp_seq=2 hlim=64 time=7.579 ms
-^C
 --- 2804:2002:: ping6 statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/std-dev = 7.579/107.933/270.940/116.287 ms
 ```
-And, this is a success! We can jump into the configuration with the P3. 
+Everything is working perfectly! Now we are ready to tackle the configuration for P3
 
-In this scenario, we'll use the IPv6 IPv4 compatible, or most knowly, the IPv4-mapped IPv6 address. You know what is this? A technique used to map 32-bit IPv4 addresses into the 128-bit IPv6 space, allowing IPv6-only applications to communicate with IPv4 nodes. The format is ::ffff:w.x.y.z, where w.x.y.z is the IPv4 address, we'll explore this now. 
+In this scenario, we will explore IPv4-mapped IPv6 addresses. This technique maps 32-bit IPv4 addresses into the 128-bit IPv6 address space, allowing IPv6-capable applications and protocols to handle IPv4 nodes seamlessly.
 
-This time, in our BGP session we'll speak the family inet and the family inet6 using the BGP session in IPv6 only. And the IPv4-mapped IPv6 address will work as recursive next-hop, because the routes received will go with the next-hop ::ffff:w.x.y.z, look here:
+The format follows the pattern ::ffff:w.x.y.z, where w.x.y.z is the original IPv4 address. In our BGP session, we will exchange both family inet and family inet6 prefixes over a single session. The IPv4-mapped address will act as a recursive next-hop, meaning the received IPv6 routes will point to ::ffff:172.16.3.6.
+
+We need to configure both the standard IPv4 address and the mapped IPv6 address on the interface:
 ```
 set interfaces ge-0/0/6 description to-P3-1
 set interfaces ge-0/0/6 flexible-vlan-tagging
@@ -405,7 +401,7 @@ set interfaces ge-0/0/6 unit 302 vlan-id 302
 set interfaces ge-0/0/6 unit 302 family inet address 172.16.3.5/30
 set interfaces ge-0/0/6 unit 302 family inet6 address ::ffff:172.16.3.5/126
 ```
-The policies are similary with P2 policies:
+The policies for P3 follow our established baseline: filtering by prefix length and tagging with provider-specific communities.
 ```
 set policy-options policy-statement Entrada-P3 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
 set policy-options policy-statement Entrada-P3 term 1 then community add P3
@@ -425,7 +421,7 @@ set policy-options policy-statement Saida-P3 term v6 from route-filter fd10:faca
 set policy-options policy-statement Saida-P3 term v6 then accept
 set policy-options policy-statement Saida-P3 then reject
 ```
-The configuration of the BGP:
+Now, let's look at the BGP group configuration. Notice that we are establishing the neighbor using the IPv4 address but enabling both address families:
 ```
 set protocols bgp group eBGP-AS65503-Provider3 type external
 set protocols bgp group eBGP-AS65503-Provider3 description eBGP-AS65503-Provider3
@@ -437,7 +433,7 @@ set protocols bgp group eBGP-AS65503-Provider3 export Saida-P3
 set protocols bgp group eBGP-AS65503-Provider3 peer-as 65503
 set protocols bgp group eBGP-AS65503-Provider3 neighbor 172.16.3.6
 ```
-This way, in the session with the 172.16.3.6, IPv6 routes also IPv6 routes are changed. Let's look the results:
+By checking the received routes, we can see the mapping in action. While IPv4 prefixes look normal, the IPv6 prefixes now use the mapped address as their next-hop:
 ```
 root@R3> show route receive-protocol bgp 172.16.3.6 
 
@@ -486,14 +482,13 @@ inet6.0: 35 destinations, 56 routes (35 active, 0 holddown, 0 hidden)
 ```
 Remember the IPv4-mapped IPv6 address, the existence of that configuration active these routes. 
 
-Ok, everything looks good, but to confirm this, we need to check the connectivity:
+To confirm that the recursive resolution is working correctly in the data plane, let's run our pings:
 ```
 root@R3> ping 2804:2003:: source fd10:faca:f0fa::3 
 PING6(56=40+8+8 bytes) fd10:faca:f0fa::3 --> 2804:2003::
 16 bytes from 2804:2003::, icmp_seq=0 hlim=64 time=30.633 ms
 16 bytes from 2804:2003::, icmp_seq=1 hlim=64 time=231.248 ms
 16 bytes from 2804:2003::, icmp_seq=2 hlim=64 time=18.939 ms
-^C
 --- 2804:2003:: ping6 statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/std-dev = 18.939/93.607/231.248/97.444 ms
@@ -503,31 +498,28 @@ PING 200.3.0.1 (200.3.0.1): 56 data bytes
 64 bytes from 200.3.0.1: icmp_seq=0 ttl=64 time=45.296 ms
 64 bytes from 200.3.0.1: icmp_seq=1 ttl=64 time=7.226 ms
 64 bytes from 200.3.0.1: icmp_seq=2 ttl=64 time=5.994 ms
-^C
 --- 200.3.0.1 ping statistics ---
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 5.994/19.505/45.296/18.244 ms
 ```
-And... everything is working perfectly!!! 
+Everything is working perfectly! This setup demonstrates how flexible Junos can be when handling multi-protocol BGP environments.
 
-Now, let's configure our last Provider peering. 
-In R7 and R8 we have a connection with the Provider 1, or, simply P1. This is a common dual-stack connection. But, we need to learn something, if this won't in the kind of the session, will be in the policies haha. 
+To conclude our Upstream configurations, we will set up the sessions with Provider 1 (P1) on R7 and R8. This is a standard dual-stack connection, but with specific traffic engineering requirements:
 
-In this case, in the import, we need to install ONLY routes of the AS65501, and reject the remaining. We also must prefer the upload via R8. 
-And, in the export, we must send the prefixes of our AS with the no-export well-known community (the customers prefixes will be exported normally), this way the P1 will not propagate our prefixes to the internet. 
+Strict Inbound Filtering: We must only accept routes originated by AS65501.
 
-So, with the constraints defined, let's do that:
+Inbound Traffic Engineering: We want to prefer the path via R8 for all incoming traffic from P1 (setting a higher Local Preference).
 
-First, we need to create an as-path do define a "matcher". We will use a regex to match only the routes originated by the AS65501
+Policy Export: Our own prefixes must be advertised with the no-export well-known community, ensuring P1 does not propagate them further to the global internet. Customers' prefixes, however, will be advertised normally.
+
+First, let's create the AS-Path regular expression to match routes originated by P1 and define the no-export community:
 ```
 set policy-options as-path AS65501 .*65501
-```
-Ok, now we need to define the no-export community to add this in our prefixes:
-```
 set policy-options community no-export members no-export
 ```
 With this, we can define our policies, let's go:
 
+On R8, we will apply a local-preference of 200 to make it the preferred exit point for our AS when reaching P1 destinations.
 R7:
 ```
 set policy-options policy-statement Entrada-P1 term 1 from as-path AS65501
@@ -553,7 +545,7 @@ set policy-options policy-statement Saida-P1 term v6 then community add no-expor
 set policy-options policy-statement Saida-P1 term v6 then accept
 set policy-options policy-statement Saida-P1 then reject
 ```
-R8: You can note here, to direct the upload for the R8 session, we can use local-preference, I am setting the LP 
+R8:
 ```
 set policy-options policy-statement Entrada-P1 term 1 from as-path AS65501
 set policy-options policy-statement Entrada-P1 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
@@ -582,7 +574,7 @@ set policy-options policy-statement Saida-C5 term v6 from route-filter fd10:faca
 set policy-options policy-statement Saida-C5 term v6 then accept
 set policy-options policy-statement Saida-C5 then reject
 ```
-And, let's to the BGP configuration:
+With the policies ready, we apply them to the BGP groups on both routers:
 R7:
 ```
 set protocols bgp group eBGP-AS65501 type external
@@ -648,9 +640,9 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 fc09:c0:ffee:8::2       65501      27325      27157       0       0 1w1d 13:46:45 Establ
   inet6.0: 1/3/1/0
 ```
-Here you can see that the routes are active in both routers, this happens because we don't have configured our iBGP yet. In the next chapter of our journey, we'll configure this iBGP and the routes will become inactive. 
+Here you can see that the routes are active on both routers. This is because we haven't configured iBGP yet. In the next chapter of our journey, we will configure iBGP and the routes will become inactive. 
 
-But, let's desconsiderate this situation, the best thing to do is check if we are setting the local-pref value to 200 in R8:
+Let's verify if R8 is correctly applying the local-preference of 200 to the routes learned from AS65501:
 ```
 root@R8> show route protocol bgp aspath-regex .*65501                 
 
@@ -674,7 +666,7 @@ inet6.0: 34 destinations, 55 routes (34 active, 0 holddown, 2 hidden)
                       AS path: 65501 I, validation-state: unverified
                     >  to fc09:c0:ffee:8::2 via ge-0/0/1.801
 ```
-And, this is ok!!! Let's check the communication to finish this. 
+To wrap things up, we test communication from our loopbacks to the P1 network. Successful pings across both IPv4 and IPv6 confirm that our routing and policies are solid:
 ```
 root@R7> ping 200.1.0.1 source 172.17.0.7 
 PING 200.1.0.1 (200.1.0.1): 56 data bytes
@@ -748,16 +740,21 @@ PING6(56=40+8+8 bytes) fd10:faca:f0fa::8 --> 2804:2001::2
 2 packets transmitted, 2 packets received, 0% packet loss
 round-trip min/avg/max/std-dev = 13.382/17.796/22.210/4.414 ms
 ```
-And... everything is ok!!!
+Everything is working perfectly! While routes are currently active on both routers because our iBGP mesh isn't up yet, our eBGP foundations are ready.
 
-Let's go to the customers peering configuration! 
+Now, let's configure our first customer, Customer 5 (C5), connected to R5 via two different sites. This customer has a backdoor link between their CEs and has requested load balancing across both links.
 
-In R5, we have the C5 connected in two different sites, and this customer have a backdoor link between the CEs. The Customer ask us to load-balancing the traffic between the links. 
-Another good practice that I've adopted is, not accept the default route from customers, after all, we are the upstream of them. To prevent route flaps, we'll configure bgp damping in all customer sessions. 
+To ensure a robust and professional setup, we will implement several best practices:
 
-So, with this, let's make the configuration. In import policy, we'll reject the default route, accept only routes from AS64505 (The AS-PATH matching is to avoid problems, what if the customer export the route 8.8.8.8 with the blackhole community? You will install this route with the discard action, you know, right? In the real scenario, we'll use RPKI to accept routes from customers of our customer, but this is not the case), with the blackhole community. We'll add another type of community, a community that change de local-preference in our network to provide to customer some options of traffic engineering. If our customer export a prefix with the community Cust-LP-90, then our router will set the local-pref value to 90. The another two terms will accept the customer prefixes according to our intern policy, the customer prefixes will have a local-pref value of 600, after all, we need to sell our service hahah. 
+Default Route Filtering: We will not accept a default route from the customer, as we are their upstream.
 
-In export policy, we'll send our DFZ (With the routes installed from IX, Providers, Customers, and our aggregated route) and the default gateway (The default route was configured in previous chapters, do you remember that?). 
+BGP Damping: To protect our network from instability, we’ll enable damping to penalize flapping routes.
+
+Traffic Engineering Options: We will provide communities (e.g., Cust-LP-90) allowing the customer to lower their local preference within our AS.
+
+Service Monetization: By default, customer routes will be assigned a local-preference of 600, ensuring they are preferred over IX or Provider routes.
+
+The import policy handles prefix filtering, blackhole communities (with a discard next-hop), and local preference manipulation. In the export policy, we advertise the DFZ prefixes and a default gateway.
 ```
 set policy-options policy-statement Entrada-C5 term deny-gw from route-filter 0.0.0.0/0 exact
 set policy-options policy-statement Entrada-C5 term deny-gw then reject
@@ -795,7 +792,7 @@ set policy-options policy-statement Saida-C5 term DCs from route-filter 172.17.0
 set policy-options policy-statement Saida-C5 term DCs then accept
 set policy-options policy-statement Saida-C5 then reject
 ```
-With the policies defined, we can configure the BGP sessions. To permit the premisse of load-balancing, we need to configure the multipath. And for the damping, in this case we don't need to change the parameters, so, the "damping" on the configuration makes what we want. 
+To allow load balancing, we must enable multipath in the BGP group. We also enable damping using default parameters.
 ```
 set protocols bgp group eBGP-AS64505 type external
 set protocols bgp group eBGP-AS64505 description eBGP-AS64505
@@ -810,8 +807,7 @@ set protocols bgp group eBGP-AS64505 neighbor fc09:c0:ffee:5::2 family inet6 uni
 set protocols bgp group eBGP-AS64505 neighbor 172.16.5.6 family inet unicast
 set protocols bgp group eBGP-AS64505 neighbor fc09:c0:ffee:5::6 family inet6 unicast
 ```
-But, this is sufficient to do the load-balancing? Let's check this:
-
+Important Observation: Even with multipath enabled, Junos only installs one active path in the FIB by default. You can see this by checking the show route forwarding-table:
 ```
 root@R5> show route 201.5.0.0/24 active-path      
 
@@ -832,9 +828,7 @@ inet6.0: 41 destinations, 66 routes (38 active, 0 holddown, 8 hidden)
                       AS path: 64505 I, validation-state: unverified
                        to fc09:c0:ffee:5::2 via ge-0/0/8.501
                     >  to fc09:c0:ffee:5::6 via ge-0/0/9.502
-```
-We are receiving the routes from both CEs, but to check if the load-balancing are happen, we need to check our FIB:
-```
+
 root@R5> show route forwarding-table destination 201.5.0.0/24    
 Routing table: default.inet
 Internet:
@@ -848,12 +842,12 @@ Destination        Type RtRef Next hop           Type Index    NhRef Netif
 ```
 And, we can see that only one interface are used to forward the traffic for these prefixes. 
 
-To do the load-balance, we need to make a policy and apply this in the forwarding-table. 
+To truly achieve per-flow load balancing in the data plane, we must create a forwarding-table export policy:
 ```            
 set policy-options policy-statement load-balance then load-balance per-flow
 set routing-options forwarding-table export load-balance
 ```
-With this, all the traffic will be load-balance in per-flow mode. Now, we can check the results: 
+Now, let's verify the results in the FIB. Notice the ulst (Unicast List) type, indicating multiple next-hops:
 ```
 root@R5> show route forwarding-table destination 201.5.0.0/24 
 Routing table: default.inet
@@ -871,7 +865,7 @@ Destination        Type RtRef Next hop           Type Index    NhRef Netif
                               fc09:c0:ffee:5::2  ucst      705     4 ge-0/0/8.501
                               fc09:c0:ffee:5::6  ucst      795     4 ge-0/0/9.502
 ```
-And, now it's ok!!! We are load-balancing the traffic correctly, but we need to check the connectiviy to say that is 100%. 
+Final pings confirm that reachability is 100% and traffic is flowing correctly across both links: 
 ```
 root@R5> ping 201.5.0.3 source 172.17.0.5 
 PING 201.5.0.3 (201.5.0.3): 56 data bytes
@@ -912,11 +906,13 @@ PING6(56=40+8+8 bytes) fd10:faca:f0fa::5 --> 2804:2015::6
 3 packets transmitted, 3 packets received, 0% packet loss
 round-trip min/avg/max/std-dev = 6.837/9.182/11.499/1.903 ms
 ```
-And... everything is ok! 
+Success! We have successfully implemented a redundant, load-balanced customer peering with professional-grade filtering and TE options.
 
-Now, we can go for the C2, the C2 are multi-homed by R6. In this case, we have two connections with C2 with the same CE. The customer ask us to establish the session with a loopback address. This way, we will have only one session but with physical redundancy, this customer doesn't have IPv6 (disgusting). He also wants to receive a default route only. 
+Now, let's configure Customer 2 (C2), who is multi-homed to R6. This scenario presents a specific challenge: the customer has two physical connections to the same CE but wants to establish the BGP session using a loopback address (172.16.6.254).
 
-Let's go. The customer have the 172.16.6.254 address on his loopback interface, so, we need to make a static route load-balancing between the interfaces. And, create the policy for load-balancing per-flow and apply on the forwarding-table. 
+The goal is to maintain a single BGP session that remains stable as long as at least one physical link is up. Note that this customer is IPv4-only (disgusting, like github btw, ALÔ GITHUB, CADÊ O IPV6?). Additionally, they only wish to receive a default route from us.
+
+Before the BGP session can come up, R6 must know how to reach the customer's loopback. We will use static routes pointing to both physical interfaces to enable path redundancy and load balancing: 
 ```
 set routing-options static route 172.16.6.254/32 next-hop 172.16.6.6
 set routing-options static route 172.16.6.254/32 next-hop 172.16.6.10
@@ -933,7 +929,7 @@ Destination        Type RtRef Next hop           Type Index    NhRef Netif
                               172.16.6.6         ucst      652     3 ge-0/0/5.602
                               172.16.6.10        ucst      653     3 ge-0/0/9.603
 ```
-Ok, with this defined, we can go to the policies configuration:
+The import policy follows our security baseline (rejecting default gateways and handling blackholes), while the outbound policy is strictly limited to advertising the default route.
 ```
 set policy-options as-path AS64502 .*64502
 set policy-options policy-statement Entrada-C2 term deny-gw from route-filter 0.0.0.0/0 exact
@@ -960,7 +956,7 @@ set policy-options policy-statement Saida-C2 term Default from route-filter 0.0.
 set policy-options policy-statement Saida-C2 term Default then accept
 set policy-options policy-statement Saida-C2 then reject
 ```
-With the policies ready, we can configure the BGP session: As you know, I hope, eBGP sessions have a value of TTL as 1, this is not 100% [true](https://www.networkfuntimes.com/your-multihop-bgp-session-probably-isnt-multi-hop/). However much that our neighbor are directly connected, and have the address that I set on the session, the session will not establish. You got the not 100% true of TTL? Even tough our neighbor is directly connected, if we don't use the direct address of the interface, we need the "multihop" knob. So, we need to configure the multihop to establish the session correctly. The damping in this case, will follow the standar parameters, as C5. 
+With the policies ready, we can configure the BGP session: As you probably know, eBGP sessions have a TTL value of 1, but this isn't 100% [true](https://www.networkfuntimes.com/your-multihop-bgp-session-probably-isnt-multi-hop/). Even if our neighbors are directly connected and have the address I defined in the session, the session won't be established. Do you understand that the TTL isn't 100% true? Even if the neighbor is physically one hop away, we must use the multihop knob. This allows the session to establish and tells Junos to look into the routing table to resolve the neighbor's address.
 ```
 set protocols bgp group eBGP-AS64502 type external
 set protocols bgp group eBGP-AS64502 description eBGP-AS64502
@@ -990,7 +986,8 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 172.16.6.254          64502      27603      30453       0       0 1w2d 14:00:39 Establ
   inet.0: 7/8/7/0
 ```
-The session is established, now, let's check the connectivity and redundancy...
+
+After establishing the session, we conducted a stress test. While running a continuous ping to the customer's network (201.2.1.1), we manually disabled one of the physical interfaces (ge-0/0/9).
 ```
 root@R6> ping source 172.17.0.6 201.2.1.1      
 PING 201.2.1.1 (201.2.1.1): 56 data bytes
@@ -1039,36 +1036,52 @@ root@R6# commit and-quit
 30 packets transmitted, 30 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 2.613/62.469/350.220/93.325 ms
 ```
-We didn't have any packet loss during the fail. Everything is ok!!!
+The ping output shows that even during the interface shutdown, zero packets were lost. The static route immediately shifted all traffic to the remaining interface (ge-0/0/5), and the BGP session—anchored to the loopback—never flapped.
 
-Now, we'll configure our last customer, C1! C1 is multihomed by R6 and R7 and doesn't have IPv6 (disgusting). In this scenario we must limit the advertised routes in 20, and drop the session in case of exceeding. We'll apply an aggressive damping for this customer and prefer to send and receive the traffic via R6, we'll use the local-pref and MED to achieve this. 
+This is the power of a well-architected Multihop BGP session!
+
+To wrap up our external peering configurations, we have Customer 1 (C1). This customer is dual-homed to our network via R6 and R7. Like C2, they are still IPv4-only.
+
+For this customer, we have implemented several advanced stability and traffic engineering constraints:
+
+Prefix Security: A strict limit of 20 prefixes. If the customer exceeds this, the session will automatically shut down (teardown).
+
+Aggressive Dampening: To prevent unstable routes from affecting our core, we've defined a custom "aggressive" dampening profile.
+
+Traffic Steering: We prefer R6 for both sending and receiving traffic. We'll use Local Preference for inbound control and MED for outbound influence.
 
 With the constraints defined, let's go. 
 
-The policies are similar to the other policies that we configured before, but in this case, in the R7 we'll modify the MED value in the export, and the local-pref value in the import, see:
+First, we define our custom dampening parameters and the steering logic. On R7, we set a lower Local Preference with the value of 590 and a higher MED with the value of 10 to make it the secondary path.
+```
+set policy-options damping aggressive half-life 20
+set policy-options damping aggressive reuse 500
+set policy-options damping aggressive suppress 2500
+set policy-options policy-statement aggressive-damp then damping aggressive
+```
 R6:
 ```
 set policy-options as-path AS64501 .*64501
-set term deny-gw from as-path AS64501
-set term deny-gw from route-filter 0.0.0.0/0 exact
-set term deny-gw then reject
-set term BH from as-path AS64501
-set term BH from community Blackhole
-set term BH from route-filter 0.0.0.0/0 prefix-length-range /8-/24
-set term BH then next-hop discard
-set term BH then accept
-set term Baixa-LP from as-path AS64501
-set term Baixa-LP from community Cust-LP-90
-set term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
-set term Baixa-LP then local-preference 90
-set term Baixa-LP then accept
-set term 1 from as-path AS64501
-set term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
-set term 1 then local-preference 600
-set term 1 then community add C1
-set term 1 then community add Customer
-set term 1 then accept
-set then reject
+set policy-options policy-statement Entrada-C1 term deny-gw from as-path AS64501
+set policy-options policy-statement Entrada-C1 term deny-gw from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Entrada-C1 term deny-gw then reject
+set policy-options policy-statement Entrada-C1 term BH from as-path AS64501
+set policy-options policy-statement Entrada-C1 term BH from community Blackhole
+set policy-options policy-statement Entrada-C1 term BH from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term BH then next-hop discard
+set policy-options policy-statement Entrada-C1 term BH then accept
+set policy-options policy-statement Entrada-C1 term Baixa-LP from as-path AS64501
+set policy-options policy-statement Entrada-C1 term Baixa-LP from community Cust-LP-90
+set policy-options policy-statement Entrada-C1 term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term Baixa-LP then local-preference 90
+set policy-options policy-statement Entrada-C1 term Baixa-LP then accept
+set policy-options policy-statement Entrada-C1 term 1 from as-path AS64501
+set policy-options policy-statement Entrada-C1 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term 1 then local-preference 600
+set policy-options policy-statement Entrada-C1 term 1 then community add C1
+set policy-options policy-statement Entrada-C1 term 1 then community add Customer
+set policy-options policy-statement Entrada-C1 term 1 then accept
+set policy-options policy-statement Entrada-C1 then reject
 
 set policy-options policy-statement Saida-C1 term Default from route-filter 0.0.0.0/0 exact
 set policy-options policy-statement Saida-C1 term Default then accept
@@ -1116,14 +1129,8 @@ set policy-options policy-statement Saida-C1 term DCs then metric 10
 set policy-options policy-statement Saida-C1 term DCs then accept
 set policy-options policy-statement Saida-C1 then reject
 ```
-With this defined, the traffic will be send/received via R6. Still in the policies, to make an aggressive dampening, we need to define the parameters of the aggressive dampening, and apply it on the BGP session trough policy. Let's see it, we must apply this on both routers.  
-```
-set policy-options damping aggressive half-life 20
-set policy-options damping aggressive reuse 500
-set policy-options damping aggressive suppress 2500
-set policy-options policy-statement aggressive-damp then damping aggressive
-```
-Now, we can go to the BGP configuration: The knob "dampening" must be configured even if we are applying this through policies. And we will define the limit of prefixes in 20, with the teardown defined, we are saying to our router shutdown the session if receives more than 20 prefixes. 
+
+In the BGP group, we apply the damping via policy and set the prefix-limit. The teardown option is the "nuclear" choice—it drops the session immediately upon violation.
 ```
 set protocols bgp group eBGP-AS64501 type external
 set protocols bgp group eBGP-AS64501 description eBGP-AS64501
@@ -1179,16 +1186,11 @@ inet6.0
 Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
 172.16.7.2            64501         16          4       0  346371           1 Active
 ```
-The session with the R7 will not establish, but why?
-
-Checking the log, I found the follow message:
+During testing, the customer advertised 21 prefixes. As expected, the session on R7 moved to the "Active" (Idle) state and refused to establish. The logs confirm the violation:
 ```
 Feb 25 11:29:35  R7 rpd[24610]: BGP_CEASE_PREFIX_LIMIT_EXCEEDED: 172.16.7.2 (External AS 64501): Shutting down peer due to exceeding configured maximum prefix-limit(20) for inet-unicast nlri: 21 (instance master)
 ```
-The customer are advertising 21 prefixes, so, our prefix-limit are working as expected! 
-
-Now, let's check the connectivity and our manipulation. I'll access the CE to show you the results:
-CE to R7 and R6:
+Once the customer corrected their advertisement, we verified the path selection. A traceroute from the CE shows traffic correctly flowing towards R6 and R7:
 ```
 [admin@C1-1] > tool traceroute 172.17.0.7 src-address=201.1.0.1
 Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
@@ -1221,7 +1223,7 @@ inet.0: 118 destinations, 119 routes (113 active, 0 holddown, 5 hidden)
                       AS path: 64501 I, validation-state: unverified
                     >  to 172.16.7.2 via ge-0/0/5.701
 ```
-Finally, we can test the bgp route dampening, if this are working correctly:
+We also checked the Aggressive Dampening status. Even though the route is currently active, Junos tracks the "Merit" and "Flaps" history, ready to suppress the prefix if it starts flapping again:
 ```
 root@R7> show route damping decayed detail 
 
@@ -1254,6 +1256,6 @@ inet.0: 118 destinations, 119 routes (113 active, 0 holddown, 5 hidden)
 ```
 And... it's working, everything is ok!!!
 
-Now, we have finished our eBGP peerings, achieving all of our goals. I hope you follow all the chapter to be prepared with me to JNCIE-SP. 
+We have now completed our eBGP peering, achieving all our objectives. I hope you will follow the entire chapter to prepare with me for JNCIE-SP.
 
-In the next chapter, we'll do our iBGP network, and we finally can test the connectivity between ASs!!! See you soon. 
+In the next chapter, we will create our iBGP network and finally be able to test connectivity between the ASs! See you soon!
