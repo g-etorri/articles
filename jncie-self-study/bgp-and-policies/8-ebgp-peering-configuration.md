@@ -1,6 +1,7 @@
 # eBGP Peering Configuration
 
 Hello guys! Today we are going to configure eBGP peerings within our ASN. Here is our topology:
+
 <img width="979" height="833" alt="image" src="https://github.com/user-attachments/assets/06333cff-6ecc-4727-aa40-53a288f4f13b" />
 
 For this task, we will do some particularities to practice our BGP handling. 
