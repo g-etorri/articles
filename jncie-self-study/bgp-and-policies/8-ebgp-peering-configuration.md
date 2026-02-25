@@ -1041,3 +1041,219 @@ round-trip min/avg/max/stddev = 2.613/62.469/350.220/93.325 ms
 ```
 We didn't have any packet loss during the fail. Everything is ok!!!
 
+Now, we'll configure our last customer, C1! C1 is multihomed by R6 and R7 and doesn't have IPv6 (disgusting). In this scenario we must limit the advertised routes in 20, and drop the session in case of exceeding. We'll apply an aggressive damping for this customer and prefer to send and receive the traffic via R6, we'll use the local-pref and MED to achieve this. 
+
+With the constraints defined, let's go. 
+
+The policies are similar to the other policies that we configured before, but in this case, in the R7 we'll modify the MED value in the export, and the local-pref value in the import, see:
+R6:
+```
+set policy-options as-path AS64501 .*64501
+set term deny-gw from as-path AS64501
+set term deny-gw from route-filter 0.0.0.0/0 exact
+set term deny-gw then reject
+set term BH from as-path AS64501
+set term BH from community Blackhole
+set term BH from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set term BH then next-hop discard
+set term BH then accept
+set term Baixa-LP from as-path AS64501
+set term Baixa-LP from community Cust-LP-90
+set term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set term Baixa-LP then local-preference 90
+set term Baixa-LP then accept
+set term 1 from as-path AS64501
+set term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set term 1 then local-preference 600
+set term 1 then community add C1
+set term 1 then community add Customer
+set term 1 then accept
+set then reject
+
+set policy-options policy-statement Saida-C1 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-C1 term Default then accept
+set policy-options policy-statement Saida-C1 term General from community Provider
+set policy-options policy-statement Saida-C1 term General from community Customer
+set policy-options policy-statement Saida-C1 term General from community IX
+set policy-options policy-statement Saida-C1 term General then accept
+set policy-options policy-statement Saida-C1 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-C1 term DCs then accept
+set policy-options policy-statement Saida-C1 then reject
+```
+R7:
+```
+set policy-options as-path AS64501 .*64501
+set policy-options policy-statement Entrada-C1 term deny-gw from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Entrada-C1 term deny-gw then reject
+set policy-options policy-statement Entrada-C1 term BH from as-path AS64501
+set policy-options policy-statement Entrada-C1 term BH from community Blackhole
+set policy-options policy-statement Entrada-C1 term BH from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term BH then next-hop discard
+set policy-options policy-statement Entrada-C1 term BH then accept
+set policy-options policy-statement Entrada-C1 term Baixa-LP from as-path AS64501
+set policy-options policy-statement Entrada-C1 term Baixa-LP from community Cust-LP-90
+set policy-options policy-statement Entrada-C1 term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term Baixa-LP then local-preference 90
+set policy-options policy-statement Entrada-C1 term Baixa-LP then accept
+set policy-options policy-statement Entrada-C1 term 1 from as-path AS64501
+set policy-options policy-statement Entrada-C1 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C1 term 1 then local-preference 590
+set policy-options policy-statement Entrada-C1 term 1 then community add C1
+set policy-options policy-statement Entrada-C1 term 1 then community add Customer
+set policy-options policy-statement Entrada-C1 term 1 then accept
+set policy-options policy-statement Entrada-C1 then reject
+
+set policy-options policy-statement Saida-C1 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-C1 term Default then metric 10
+set policy-options policy-statement Saida-C1 term Default then accept
+set policy-options policy-statement Saida-C1 term General from community Provider
+set policy-options policy-statement Saida-C1 term General from community Customer
+set policy-options policy-statement Saida-C1 term General from community IX
+set policy-options policy-statement Saida-C1 term General then metric 10
+set policy-options policy-statement Saida-C1 term General then accept
+set policy-options policy-statement Saida-C1 term DCs from route-filter 172.17.0.0/22 exact
+set policy-options policy-statement Saida-C1 term DCs then metric 10
+set policy-options policy-statement Saida-C1 term DCs then accept
+set policy-options policy-statement Saida-C1 then reject
+```
+With this defined, the traffic will be send/received via R6. Still in the policies, to make an aggressive dampening, we need to define the parameters of the aggressive dampening, and apply it on the BGP session trough policy. Let's see it, we must apply this on both routers.  
+```
+set policy-options damping aggressive half-life 20
+set policy-options damping aggressive reuse 500
+set policy-options damping aggressive suppress 2500
+set policy-options policy-statement aggressive-damp then damping aggressive
+```
+Now, we can go to the BGP configuration: The knob "dampening" must be configured even if we are applying this through policies. And we will define the limit of prefixes in 20, with the teardown defined, we are saying to our router shutdown the session if receives more than 20 prefixes. 
+```
+set protocols bgp group eBGP-AS64501 type external
+set protocols bgp group eBGP-AS64501 description eBGP-AS64501
+set protocols bgp group eBGP-AS64501 log-updown
+set protocols bgp group eBGP-AS64501 damping
+set protocols bgp group eBGP-AS64501 import aggressive-damp
+set protocols bgp group eBGP-AS64501 import Entrada-C1
+set protocols bgp group eBGP-AS64501 export Saida-C1
+set protocols bgp group eBGP-AS64501 peer-as 64501
+set protocols bgp group eBGP-AS64501 neighbor 172.16.6.2 family inet unicast
+
+set protocols bgp group eBGP-AS64501 type external
+set protocols bgp group eBGP-AS64501 description eBGP-AS64501
+set protocols bgp group eBGP-AS64501 log-updown
+set protocols bgp group eBGP-AS64501 damping
+set protocols bgp group eBGP-AS64501 import aggressive-damp
+set protocols bgp group eBGP-AS64501 import Entrada-C1
+set protocols bgp group eBGP-AS64501 export Saida-C1
+set protocols bgp group eBGP-AS64501 peer-as 64501
+set protocols bgp group eBGP-AS64501 neighbor 172.16.7.2 family inet unicast prefix-limit maximum 20
+set protocols bgp group eBGP-AS64501 neighbor 172.16.7.2 family inet unicast prefix-limit teardown
+```
+Let's check the results now:
+```
+root@R6> show bgp summary group eBGP-AS64501 
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 3 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       1          1          0          0          0          0
+inet.0               
+                     147        144          0          0          0          0
+inet6.0              
+                      24          6          0          0          0          0
+bgp.l3vpn.0          
+                      14         14          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.16.6.2            64501      27715      30593       0       0 1w2d 14:54:13 Establ
+  inet.0: 8/8/8/0
+
+root@R7> show bgp summary group eBGP-AS64501 
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 4 Down peers: 1
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       0          0          0          0          0          0
+inet.0               
+                      53         31         20         20         40          0
+inet6.0              
+                       3          1          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.16.7.2            64501         16          4       0  346371           1 Active
+```
+The session with the R7 will not establish, but why?
+
+Checking the log, I found the follow message:
+```
+Feb 25 11:29:35  R7 rpd[24610]: BGP_CEASE_PREFIX_LIMIT_EXCEEDED: 172.16.7.2 (External AS 64501): Shutting down peer due to exceeding configured maximum prefix-limit(20) for inet-unicast nlri: 21 (instance master)
+```
+The customer are advertising 21 prefixes, so, our prefix-limit are working as expected! 
+
+Now, let's check the connectivity and our manipulation. I'll access the CE to show you the results:
+CE to R7 and R6:
+```
+[admin@C1-1] > tool traceroute 172.17.0.7 src-address=201.1.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS     LOSS  SENT  LAST   AVG  BEST  WORST  STD-DEV
+1  172.16.6.1  0%       4  4.4ms  8.8  4.4   12.8   3.7    
+2  172.17.0.7  0%       4  3.6ms  4.5  2.7   8.2    2.2
+
+[admin@C1-1] > tool traceroute 172.17.0.6 src-address=201.1.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS     LOSS  SENT  LAST   AVG  BEST  WORST  STD-DEV
+1  172.17.0.6  0%       2  0.8ms  0.8  0.8   0.8          0 
+```
+And, let's check if we are changing the local-pref value: We can't test the download teste because we don't have the iBGP defined yet. 
+```
+root@R6> show route 201.1.0.1 
+
+inet.0: 225 destinations, 228 routes (220 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+201.1.0.0/24       *[BGP/170] 1w2d 15:04:22, localpref 600
+                      AS path: 64501 I, validation-state: unverified
+                    >  to 172.16.6.2 via ge-0/0/8.601
+
+root@R7> show route 201.1.0.1 
+
+inet.0: 118 destinations, 119 routes (113 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+201.1.0.0/24       *[BGP/170] 00:03:29, localpref 590
+                      AS path: 64501 I, validation-state: unverified
+                    >  to 172.16.7.2 via ge-0/0/5.701
+```
+Finally, we can test the bgp route dampening, if this are working correctly:
+```
+root@R7> show route damping decayed detail 
+
+inet.0: 118 destinations, 119 routes (113 active, 0 holddown, 5 hidden)
+201.1.0.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-591
+                Next hop type: Router, Next hop index: 672
+                Address: 0x80ac594
+                Next-hop reference count: 14, Next-hop session id: 348
+                Kernel Table Id: 0
+                Source: 172.16.7.2
+                Next hop: 172.16.7.2 via ge-0/0/5.701, selected
+                Session Id: 348
+                State: <Active Ext>
+                Local AS: 65020 Peer AS: 64501
+                Age: 29 
+                Validation State: unverified 
+                Task: BGP_64501.172.16.7.2
+                Announcement bits (2): 0-KRT 7-BGP_RT_Background 
+                AS path: 64501 I 
+                Communities: 65020:51 65020:64501
+                Accepted
+                Localpref: 590
+                Router ID: 201.1.7.1
+                Merit (last update/now): 1988/1965
+                damping-parameters: aggressive
+                Last update: 00000000:00:29 First update: 00000000:00:42
+                Flaps: 2
+                Thread: junos-main 
+```
+And... it's working, everything is ok!!!
+
+Now, we have finished our eBGP peerings, achieving all of our goals. I hope you follow all the chapter to be prepared with me to JNCIE-SP. 
+
+In the next chapter, we'll do our iBGP network, and we finally can test the connectivity between ASs!!! See you soon. 
