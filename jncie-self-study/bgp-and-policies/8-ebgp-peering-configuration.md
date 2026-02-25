@@ -753,7 +753,7 @@ And... everything is ok!!!
 Let's go to the customers peering configuration! 
 
 In R5, we have the C5 connected in two different sites, and this customer have a backdoor link between the CEs. The Customer ask us to load-balancing the traffic between the links. 
-Another good practice that I've adopted is, not accept the default route from customers, after all, we are the upstream of them. 
+Another good practice that I've adopted is, not accept the default route from customers, after all, we are the upstream of them. To prevent route flaps, we'll configure bgp damping in all customer sessions. 
 
 So, with this, let's make the configuration. In import policy, we'll reject the default route, accept only routes from AS64505 (The AS-PATH matching is to avoid problems, what if the customer export the route 8.8.8.8 with the blackhole community? You will install this route with the discard action, you know, right? In the real scenario, we'll use RPKI to accept routes from customers of our customer, but this is not the case), with the blackhole community. We'll add another type of community, a community that change de local-preference in our network to provide to customer some options of traffic engineering. If our customer export a prefix with the community Cust-LP-90, then our router will set the local-pref value to 90. The another two terms will accept the customer prefixes according to our intern policy, the customer prefixes will have a local-pref value of 600, after all, we need to sell our service hahah. 
 
@@ -795,7 +795,7 @@ set policy-options policy-statement Saida-C5 term DCs from route-filter 172.17.0
 set policy-options policy-statement Saida-C5 term DCs then accept
 set policy-options policy-statement Saida-C5 then reject
 ```
-With the policies defined, we can configure the BGP sessions. To permit the premisse of load-balancing, we need to configure the multipath.
+With the policies defined, we can configure the BGP sessions. To permit the premisse of load-balancing, we need to configure the multipath. And for the damping, in this case we don't need to change the parameters, so, the "damping" on the configuration makes what we want. 
 ```
 set protocols bgp group eBGP-AS64505 type external
 set protocols bgp group eBGP-AS64505 description eBGP-AS64505
@@ -872,4 +872,172 @@ Destination        Type RtRef Next hop           Type Index    NhRef Netif
                               fc09:c0:ffee:5::6  ucst      795     4 ge-0/0/9.502
 ```
 And, now it's ok!!! We are load-balancing the traffic correctly, but we need to check the connectiviy to say that is 100%. 
+```
+root@R5> ping 201.5.0.3 source 172.17.0.5 
+PING 201.5.0.3 (201.5.0.3): 56 data bytes
+64 bytes from 201.5.0.3: icmp_seq=0 ttl=64 time=5.171 ms
+64 bytes from 201.5.0.3: icmp_seq=1 ttl=64 time=28.183 ms
+^C
+--- 201.5.0.3 ping statistics ---
+3 packets transmitted, 2 packets received, 33% packet loss
+round-trip min/avg/max/stddev = 5.171/16.677/28.183/11.506 ms
+
+root@R5> ping 201.5.0.6 source 172.17.0.5    
+PING 201.5.0.6 (201.5.0.6): 56 data bytes
+64 bytes from 201.5.0.6: icmp_seq=0 ttl=64 time=9.743 ms
+64 bytes from 201.5.0.6: icmp_seq=1 ttl=64 time=24.503 ms
+64 bytes from 201.5.0.6: icmp_seq=2 ttl=64 time=33.228 ms
+^C
+--- 201.5.0.6 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 9.743/22.491/33.228/9.693 ms
+
+root@R5> ping source fd10:faca:f0fa::5 2804:2015::3    
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::5 --> 2804:2015::3
+16 bytes from 2804:2015::3, icmp_seq=0 hlim=64 time=24.196 ms
+16 bytes from 2804:2015::3, icmp_seq=1 hlim=64 time=52.234 ms
+16 bytes from 2804:2015::3, icmp_seq=2 hlim=64 time=72.389 ms
+^C
+--- 2804:2015::3 ping6 statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 24.196/49.606/72.389/19.762 ms
+
+root@R5> ping source fd10:faca:f0fa::5 2804:2015::6    
+PING6(56=40+8+8 bytes) fd10:faca:f0fa::5 --> 2804:2015::6
+16 bytes from 2804:2015::6, icmp_seq=0 hlim=64 time=6.837 ms
+16 bytes from 2804:2015::6, icmp_seq=1 hlim=64 time=11.499 ms
+16 bytes from 2804:2015::6, icmp_seq=2 hlim=64 time=9.209 ms
+^C
+--- 2804:2015::6 ping6 statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max/std-dev = 6.837/9.182/11.499/1.903 ms
+```
+And... everything is ok! 
+
+Now, we can go for the C2, the C2 are multi-homed by R6. In this case, we have two connections with C2 with the same CE. The customer ask us to establish the session with a loopback address. This way, we will have only one session but with physical redundancy, this customer doesn't have IPv6 (disgusting). He also wants to receive a default route only. 
+
+Let's go. The customer have the 172.16.6.254 address on his loopback interface, so, we need to make a static route load-balancing between the interfaces. And, create the policy for load-balancing per-flow and apply on the forwarding-table. 
+```
+set routing-options static route 172.16.6.254/32 next-hop 172.16.6.6
+set routing-options static route 172.16.6.254/32 next-hop 172.16.6.10
+set policy-options policy-statement load-balance then load-balance per-flow
+set routing-options forwarding-table export load-balance
+```
+This way, we are load-balancing the traffic to the customer:
+```
+root@R6> show route forwarding-table destination 172.16.6.254/32 
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+172.16.6.254/32    user     1                    ulst  1048574     4
+                              172.16.6.6         ucst      652     3 ge-0/0/5.602
+                              172.16.6.10        ucst      653     3 ge-0/0/9.603
+```
+Ok, with this defined, we can go to the policies configuration:
+```
+set policy-options as-path AS64502 .*64502
+set policy-options policy-statement Entrada-C2 term deny-gw from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Entrada-C2 term deny-gw then reject
+set policy-options policy-statement Entrada-C2 term BH from as-path AS64502
+set policy-options policy-statement Entrada-C2 term BH from community Blackhole
+set policy-options policy-statement Entrada-C2 term BH from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C2 term BH then next-hop discard
+set policy-options policy-statement Entrada-C2 term BH then accept
+set policy-options policy-statement Entrada-C2 term Baixa-LP from as-path AS64502
+set policy-options policy-statement Entrada-C2 term Baixa-LP from community Cust-LP-90
+set policy-options policy-statement Entrada-C2 term Baixa-LP from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C2 term Baixa-LP then local-preference 90
+set policy-options policy-statement Entrada-C2 term Baixa-LP then accept
+set policy-options policy-statement Entrada-C2 term 1 from as-path AS64502
+set policy-options policy-statement Entrada-C2 term 1 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement Entrada-C2 term 1 then local-preference 600
+set policy-options policy-statement Entrada-C2 term 1 then community add C2
+set policy-options policy-statement Entrada-C2 term 1 then community add Customer
+set policy-options policy-statement Entrada-C2 term 1 then accept
+set policy-options policy-statement Entrada-C2 then reject
+
+set policy-options policy-statement Saida-C2 term Default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-C2 term Default then accept
+set policy-options policy-statement Saida-C2 then reject
+```
+With the policies ready, we can configure the BGP session: As you know, I hope, eBGP sessions have a value of TTL as 1, this is not 100% [true](https://www.networkfuntimes.com/your-multihop-bgp-session-probably-isnt-multi-hop/). However much that our neighbor are directly connected, and have the address that I set on the session, the session will not establish. You got the not 100% true of TTL? Even tough our neighbor is directly connected, if we don't use the direct address of the interface, we need the "multihop" knob. So, we need to configure the multihop to establish the session correctly. The damping in this case, will follow the standar parameters, as C5. 
+```
+set protocols bgp group eBGP-AS64502 type external
+set protocols bgp group eBGP-AS64502 description eBGP-AS64502
+set protocols bgp group eBGP-AS64502 multihop
+set protocols bgp group eBGP-AS64502 local-address 10.0.0.6
+set protocols bgp group eBGP-AS64502 log-updown
+set protocols bgp group eBGP-AS64502 damping
+set protocols bgp group eBGP-AS64502 import Entrada-C2
+set protocols bgp group eBGP-AS64502 export Saida-C2
+set protocols bgp group eBGP-AS64502 peer-as 64502
+set protocols bgp group eBGP-AS64502 neighbor 172.16.6.254 family inet unicast
+
+root@R6> show bgp summary group eBGP-AS64502 
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 3 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       1          1          0          0          0          0
+inet.0               
+                     147        144          0          0          0          0
+inet6.0              
+                      24          6          0          0          0          0
+bgp.l3vpn.0          
+                      14         14          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+172.16.6.254          64502      27603      30453       0       0 1w2d 14:00:39 Establ
+  inet.0: 7/8/7/0
+```
+The session is established, now, let's check the connectivity and redundancy...
+```
+root@R6> ping source 172.17.0.6 201.2.1.1      
+PING 201.2.1.1 (201.2.1.1): 56 data bytes
+64 bytes from 201.2.1.1: icmp_seq=0 ttl=64 time=45.351 ms
+64 bytes from 201.2.1.1: icmp_seq=1 ttl=64 time=2.738 ms
+64 bytes from 201.2.1.1: icmp_seq=2 ttl=64 time=350.220 ms
+64 bytes from 201.2.1.1: icmp_seq=3 ttl=64 time=170.305 ms
+64 bytes from 201.2.1.1: icmp_seq=4 ttl=64 time=7.789 ms
+64 bytes from 201.2.1.1: icmp_seq=5 ttl=64 time=6.748 ms
+64 bytes from 201.2.1.1: icmp_seq=6 ttl=64 time=8.145 ms
+64 bytes from 201.2.1.1: icmp_seq=7 ttl=64 time=23.884 ms
+64 bytes from 201.2.1.1: icmp_seq=8 ttl=64 time=244.605 ms
+64 bytes from 201.2.1.1: icmp_seq=9 ttl=64 time=50.803 ms
+64 bytes from 201.2.1.1: icmp_seq=10 ttl=64 time=8.790 ms
+....
+[edit interfaces ge-0/0/9]
+root@R6# set disable 
+
+[edit interfaces ge-0/0/9]
+root@R6# top 
+
+[edit]
+root@R6# commit and-quit
+....
+64 bytes from 201.2.1.1: icmp_seq=11 ttl=64 time=5.862 ms
+64 bytes from 201.2.1.1: icmp_seq=12 ttl=64 time=7.650 ms
+64 bytes from 201.2.1.1: icmp_seq=13 ttl=64 time=46.283 ms
+64 bytes from 201.2.1.1: icmp_seq=14 ttl=64 time=290.740 ms
+64 bytes from 201.2.1.1: icmp_seq=15 ttl=64 time=5.517 ms
+64 bytes from 201.2.1.1: icmp_seq=16 ttl=64 time=2.613 ms
+64 bytes from 201.2.1.1: icmp_seq=17 ttl=64 time=4.472 ms
+64 bytes from 201.2.1.1: icmp_seq=18 ttl=64 time=85.001 ms
+64 bytes from 201.2.1.1: icmp_seq=19 ttl=64 time=16.531 ms
+64 bytes from 201.2.1.1: icmp_seq=20 ttl=64 time=185.696 ms
+64 bytes from 201.2.1.1: icmp_seq=21 ttl=64 time=11.961 ms
+64 bytes from 201.2.1.1: icmp_seq=22 ttl=64 time=10.123 ms
+64 bytes from 201.2.1.1: icmp_seq=23 ttl=64 time=170.741 ms
+64 bytes from 201.2.1.1: icmp_seq=24 ttl=64 time=20.606 ms
+64 bytes from 201.2.1.1: icmp_seq=25 ttl=64 time=44.506 ms
+64 bytes from 201.2.1.1: icmp_seq=26 ttl=64 time=25.093 ms
+64 bytes from 201.2.1.1: icmp_seq=27 ttl=64 time=9.144 ms
+64 bytes from 201.2.1.1: icmp_seq=28 ttl=64 time=7.967 ms
+64 bytes from 201.2.1.1: icmp_seq=29 ttl=64 time=4.193 ms
+^C
+--- 201.2.1.1 ping statistics ---
+30 packets transmitted, 30 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 2.613/62.469/350.220/93.325 ms
+```
+We didn't have any packet loss during the fail. Everything is ok!!!
 
