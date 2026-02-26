@@ -7,19 +7,12 @@ Today is the big day. It's time to bring up our IGP.
 Our goals for today are:
 
 * Establish connectivity with our new sites, DC2 and DC3.
-
 * Achieve full IPv4 and IPv6 connectivity across our routers.
-
 * Ensure full reachability between our Data Centers and the IGP core.
-
 * That's the gist of it, with a few technical details thrown in.
-
 * For our IGP backbone, we'll be running IS-IS.
-
 * However, to keep things interesting (and for practice purposes), we'll mix it up:
-
 * Connection to DC2 will be via BGP.
-
 * Connection to DC3 will use OSPFv3.
 
 To get full reachability, we'll need to redistribute (or leak) routes between these protocols and IS-IS, and vice-versa.
