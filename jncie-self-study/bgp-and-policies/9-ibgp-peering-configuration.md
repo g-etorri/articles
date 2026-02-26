@@ -26,7 +26,7 @@ We have a few tasks to accomplish to make this network truly elegant:
 
 With our constraints defined, let's set up the RRs! The RRs are pre-configured with baseline settings, just like the other routers, but without MPLS. The RR loopback address is 10.0.0.0.
 
-In R1 and R2, we need to configure the backbone interfaces: 
+First, we need to configure the backbone interfaces on R1 and R2 to bring the RR into our IS-IS routing domain:
 R1:
 ```
 set interfaces ge-0/0/4 apply-groups isis-if
@@ -40,7 +40,7 @@ set interfaces ge-0/0/4 description to-RR/ge-0/0/1
 set interfaces ge-0/0/4 unit 0 family inet address 10.200.0.26/31
 ```
 
-Now, we have the RR in the IGP:
+Let's verify the IS-IS adjacency to confirm the RR is reachable in the IGP:
 ```
 root@R1> show isis adjacency RR detail 
 RR
@@ -61,9 +61,9 @@ RR
   IP addresses: 10.200.0.27
 ```
 
-Now we have access on the RR, so, we can define the BGP groups with different cluster-ids, as I've said, we'll have two cluster, East and West. 
+Now that we have access to the RR, we can define the BGP groups with different cluster-id values for the East and West clusters.
 
-Pro Tip: The RR don't need to install the BGP routes in FIB and don't need to resolve the next-hop using the inet.3, after all it don't run mpls. With this, we can add the "no-install" and "nexthop-resolution no-resolution" knobs in the configuration. This way is easier than rib-groups or resolution-ribs techniques for me, in this model of RR out-of-path. 
+Pro Tip: Because our RR is out-of-path and doesn't run MPLS, it doesn't need to install BGP routes into the hardware Forwarding Information Base (FIB), nor does it need to resolve next-hops using the inet.3 routing table. By adding the no-install and nexthop-resolution no-resolution knobs, we optimize the RR's resources. In my experience, this approach is much cleaner than dealing with complex rib-groups or resolution-ribs.
 ```
 set protocols bgp group iBGP-AS65020-West type internal
 set protocols bgp group iBGP-AS65020-West description iBGP-AS65020-West
@@ -94,16 +94,13 @@ set protocols bgp group iBGP-AS65020-East neighbor 10.0.0.4
 set protocols bgp group iBGP-AS65020-East neighbor 10.0.0.5
 ```
 
-Ok, our BGP configuration is almost ready, but we have to add some security properties, and add the BFD to improve the failure detection. 
-
-The BFD session is simple, we'll folow the baseline standard that we have in our IGP, with 3000ms of interval. 
+To improve failure detection, we apply a BFD interval of 3000ms, matching our IGP baseline:
 ```
 set protocols bgp group iBGP-AS65020-East bfd-liveness-detection minimum-interval 3000
 set protocols bgp group iBGP-AS65020-West bfd-liveness-detection minimum-interval 3000
 ```
-Now, for the TCP-AO, we'll add the security in the TCP session established between our routers! 
 
-We need to define our key, then, apply this in the BGP groups. The start-time defined, is when the routers will change the keys to establish the connection. 
+Next, we replace legacy MD5 with TCP-AO to secure the TCP sessions established between our routers. We define the authentication key-chain, specify a start-time for key rotation, and apply it to the BGP groups.
 ```
 set security authentication-key-chains key-chain l4b key 0 secret l4b
 set security authentication-key-chains key-chain l4b key 0 start-time "2026-25-2.14:25:00 -0300"
@@ -118,11 +115,11 @@ set protocols bgp group iBGP-AS65020-East authentication-key-chain l4b
 set protocols bgp group iBGP-AS65020-West authentication-algorithm ao
 set protocols bgp group iBGP-AS65020-West authentication-key-chain l4b
 ```
-Note that send-id will be the recv-id in the other side, e.g. in the R1 the recv-id will be 1 and send-id 2 (we can repeat this in all routers, no problem).
+Note: The send-id on the RR must match the recv-id on the client, and vice versa. E.g., if the RR sends with ID 1 and receives with ID 2, the client will send with ID 2 and receive with ID 1.
 
-The RR configuration is ready now! So, we can configure our RR clients. I'll configure only one as baseline, the other routers will have a similar configuration, changing only de local-address. 
+With the RR fully configured, we move on to the RR Clients. I will use R1 as the baseline example; the other routers follow an identical structure, differing only by their local-address.
 
-We'll define two policies, the import policy to have a term to reject the routes with the blackhole community, and the export policy to change the next-hop of the prefixes, applying the next-hop-self. 
+We define an import policy to reject routes tagged with the Blackhole community, and an export policy to enforce next-hop self.
 ```
 set policy-options policy-statement next-hop-self then next-hop self
 set policy-options policy-statement import-rr term BH from community Blackhole
@@ -131,7 +128,7 @@ set policy-options policy-statement import-rr term BH then accept
 set policy-options policy-statement import-rr then accept
 ```
 
-We need to define the parameters of TCP-AO to establish the TCP session of BGP too. 
+Next, we configure the TCP-AO key-chain on the client side, ensuring we invert the send-id and recv-id values:
 ```
 et security authentication-key-chains key-chain l4b key 0 secret l4b
 set security authentication-key-chains key-chain l4b key 0 start-time "2026-25-2.14:25:00 -0300"
@@ -143,7 +140,7 @@ set security authentication-key-chains key-chain l4b key 0 ao-attribute cryptogr
 ```
 Note that the values are inverted of the values of the RR! 
 
-With all defined, we can configure our BGP session with the RR and apply the BFD too. Note, to work the 6PE function, we need to permit the configuration of ipv6-tunneling in MPLS (as I said, I've finished the MPLS configuration earlier). 
+Finally, we apply the BGP session parameters. Important: To make the 6PE functionality work seamlessly, we must configure family inet6 labeled-unicast explicit-null and ipv6-tunneling in MPLS (as I said, I finished the MPLS configuration earlier). 
 ```
 set protocols bgp group iBGP-AS65020-West type internal
 set protocols bgp group iBGP-AS65020-West description iBGP-AS65020-West
@@ -159,7 +156,7 @@ set protocols bgp group iBGP-AS65020-West bfd-liveness-detection minimum-interva
 set protocols bgp group iBGP-AS65020-West neighbor 10.0.0.0
 ```
 
-Let's see in the RR if the sessions are established! 
+Let's check the RR to ensure all sessions are established:
 ```
 root@RR> show bgp summary    
 Threading mode: BGP I/O
@@ -196,9 +193,9 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
   inet.0: 31/31/31/0
   inet6.0: 1/1/1/0
 ```
-The routes are being received and installing on the RIB, but not in the FIB due to no-install knob! 
+The routes are being received and installed in the RIB, but thanks to our no-install knob, they remain out of the FIB!
 
-Let's check if our RR clients are receiving the routes correctly? We can check in the R5 if we are receiving the routes of our Providers:
+Now, let's verify if the RR Clients are receiving the reflected routes. Here is the view from R5:
 ```
 root@R5> show route receive-protocol bgp 10.0.0.0 
 
@@ -219,10 +216,10 @@ inet6.0: 40 destinations, 68 routes (39 active, 0 holddown, 9 hidden)
 * 2804:2002::/48          ::ffff:10.0.0.3              100        65502 I
 * 2804:2003::/48          ::ffff:10.0.0.3              100        65503 I
 ```
-Everything looks good at all. 
+Everything looks perfect.
 
 
-But, let's make the proof of the truth, let's test the connectivity of the C5 with all peerings! 
+The moment of truth! Let's verify end-to-end connectivity by performing traceroutes from Customer 5 (CE5-3) across our newly established BGP Free Core towards all other peerings.
 CE5-3 -> IX-1 and IX-2:
 ```
 [admin@CE5-3] > tool traceroute src-address=201.5.0.3 address=162.0.1.1
@@ -324,7 +321,7 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 
 [admin@CE5-3] > 
 ```
-Ok, we have full connectivity with everyone!!! Our network is ready to sell IP services. 
+We have full connectivity! Our core is routing efficiently, and our network is fully primed to deliver IP services.
 
-I see you on the next chapter, when we'll configure the MPLS/SR-MPLS in our network! 
+See you in the next chapter, where we will dive into the underlying MPLS/SR-MPLS configurations that made this transit possible!
 
