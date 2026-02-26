@@ -1,20 +1,30 @@
 # iBGP Peering Configuration
 
-Hello guys, today we have a big mission to accomplish. We have to configure our BGP Free Core/6PE structure. I need to tell you, these configuration need to be followed after the MPLS configuration to see all working. But, the book don't follow the logic sequence. So, all of my tests will be sucessful because I've finished all the MPLS part. 
+Hello guys! Today we have a massive mission to accomplish: configuring our BGP Free Core and 6PE structure.
 
-Our topology is the same of the previous article:
+Before we start, I need to make a quick disclaimer. For this configuration to be fully verifiable in the data plane, it must be deployed on top of a working MPLS foundation. The study guide I am following doesn't present the topics in this exact logical sequence. Therefore, my connectivity tests at the end of this article will be successful because I have already provisioned the underlying MPLS/SR-MPLS layer in my lab. Keep that in mind!
+
+Our topology remains the same as in the previous articles:
 <img width="1145" height="744" alt="image" src="https://github.com/user-attachments/assets/9cbe9972-0a7c-45d9-98b6-de1fcfbe4e3a" />
 
 
-We have some task to accomplish and to let this network very very pretty. 
-We need to connect the RR in our IGP, it'll be connected with R1 and R2. The RR will be out-of-path, in other words, the RR will not run MPLS/SR-MPLS. 
+We have a few tasks to accomplish to make this network truly elegant:
 
-All the session must be establish using TCP-AO authentication, with BFD and log the state changes with the log-updown knob. 
+* We need to integrate the Route Reflector into our IGP. They will connect to R1 and R2.
 
-We'll have two RR clusters in this scenario, East and West. 
-R1, R8, R7 and R6 will be connected in the West, and R2, R3, R4 and R5 will connect in the East. All the routers will do the classic, next-hop-self. 
+* The RR will be out-of-path, meaning they will only handle the Control Plane and will not run MPLS/SR-MPLS or forward transit traffic.
 
-With the information defined, let's set up this RR! The RR are pre-configured like the other routers in our network, but without the MPLS/SR-MPLS configuration. His loopback address is 10.0.0.0! 
+* All iBGP sessions must be established using TCP-AO authentication and BFD, and we must log state changes using the log-updown knob.
+
+* We will deploy two RR clusters: East and West.
+
+* R1, R6, R7, and R8 will be RR Clients in the West cluster.
+
+* R2, R3, R4, and R5 will be RR Clients in the East cluster.
+
+* All PE routers will apply the classic next-hop self policy for exported routes.
+
+With our constraints defined, let's set up the RRs! The RRs are pre-configured with baseline settings, just like the other routers, but without MPLS. The RR loopback address is 10.0.0.0.
 
 In R1 and R2, we need to configure the backbone interfaces: 
 R1:
