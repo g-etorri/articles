@@ -144,6 +144,14 @@ inet.3: 15 destinations, 20 routes (7 active, 0 holddown, 11 hidden)
 ```  
 LDP is successfully tracking the IGP metrics, but let's check the LDP sync now. I'll disable the LDP session between R1 and R2. The interface metric will jump to its maximum value, and the route should shift via R4 if everything works as expected.
 ```
+root@R1> show isis interface ae0.0 detail    
+IS-IS interface database:
+ae0.0
+  Index: 325, State: 0x6, Circuit id: 0x1, Circuit type: 1
+  LSP interval: 100 ms, CSNP interval: 20 s
+  Adjacency advertisement: Advertise, Layer2-map: Disabled
+  Level Adjacencies Priority   Metric Hello (s) Hold (s) Designated Router
+    1             1       64        5     9.000       27
 root@R1> show route 10.0.0.2    
 
 inet.0: 221 destinations, 243 routes (218 active, 0 holddown, 3 hidden)
@@ -162,7 +170,6 @@ ae0.0
   Adjacency advertisement: Advertise, Layer2-map: Disabled
   Level Adjacencies Priority   Metric Hello (s) Hold (s) Designated Router
     1             1       64 16777214     9.000       27
-
 root@R1> show route 10.0.0.2 
 
 inet.0: 221 destinations, 243 routes (218 active, 0 holddown, 3 hidden)
