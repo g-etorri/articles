@@ -152,6 +152,7 @@ ae0.0
   Adjacency advertisement: Advertise, Layer2-map: Disabled
   Level Adjacencies Priority   Metric Hello (s) Hold (s) Designated Router
     1             1       64        5     9.000       27
+
 root@R1> show route 10.0.0.2    
 
 inet.0: 221 destinations, 243 routes (218 active, 0 holddown, 3 hidden)
@@ -170,6 +171,7 @@ ae0.0
   Adjacency advertisement: Advertise, Layer2-map: Disabled
   Level Adjacencies Priority   Metric Hello (s) Hold (s) Designated Router
     1             1       64 16777214     9.000       27
+
 root@R1> show route 10.0.0.2 
 
 inet.0: 221 destinations, 243 routes (218 active, 0 holddown, 3 hidden)
