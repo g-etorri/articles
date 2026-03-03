@@ -126,5 +126,15 @@ Address                  State     Interface      Time     Interval  Multiplier
 10.0.0.8                 Up                       9.000     3.000        3  
 ```
 
-
+Now, let's define the admin-groups of each LSP, half of the LSPs wil go by blue, and another half go by orange: 
+```
+set protocols mpls label-switched-path R2-R7-A admin-group include-any orange
+set protocols mpls label-switched-path R3-R6-A admin-group include-any orange
+set protocols mpls label-switched-path R6-R3-A admin-group include-any orange
+set protocols mpls label-switched-path R7-R2-A admin-group include-any orange
+set protocols mpls label-switched-path R1-R8-A admin-group include-any blue
+set protocols mpls label-switched-path R8-R1-A admin-group include-any blue
+set protocols mpls label-switched-path R4-R5-A admin-group include-any blue
+set protocols mpls label-switched-path R5-R4-A admin-group include-any blue
+```
 
