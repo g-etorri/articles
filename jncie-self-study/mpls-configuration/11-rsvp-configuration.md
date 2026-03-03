@@ -64,3 +64,67 @@ set protocols mpls interface ae0.0 admin-group blue
 set protocols mpls interface ge-0/0/3.0 admin-group orange
 set protocols mpls interface ge-0/0/2.0 admin-group blue
 ```
+
+Now, with our underlay configured, we can configure our LSPs. Here we have a list of all LSPs that we need to configure in our network:
+| Ingress | Egress | LSP Name |
+| ------- | ------ | -------- |
+| R1      | R8     | R1-R8-A  |
+| R1      | R6     | R1-R6-A  |
+| R2      | R7     | R2-R7-A  |
+| R2      | R5     | R2-R5-A  |
+| R3      | R8     | R3-R8-A  |
+| R3      | R8     | R3-R8-B  |
+| R3      | R6     | R3-R6-A  |
+| R4      | R7     | R4-R7-A  |
+| R4      | R7     | R4-R7-B  |
+| R4      | R5     | R4-R5-A  |
+| R5      | R2     | R5-R2-A  |
+| R5      | R4     | R5-R4-A  |
+| R6      | R1     | R6-R1-A  |
+| R6      | R3     | R6-R3-A  |
+| R7      | R2     | R7-R2-A  |
+| R7      | R4     | R7-R4-A  |
+| R7      | R4     | R7-R4-B  |
+| R8      | R1     | R8-R1-A  |
+| R8      | R3     | R8-R3-A  |
+| R8      | R3     | R8-R3-B  |
+
+First, let's make the standard configuration of the LSPs in our network. All the LSPs will have BFD working, and priority and hold with the worse value. 
+To BFD working accordingly, we need to add a term in our RE filter, and modify another. 
+```
+set firewall family inet filter filter-re term ALLOW-BFD from port 4784
+set firewall family inet filter filter-re term ALLOW-LSP-PING from protocol udp
+set firewall family inet filter filter-re term ALLOW-LSP-PING from port 3503
+set firewall family inet filter filter-re term ALLOW-LSP-PING then accept
+edit firewall family inet filter filter-re
+insert term ALLOW-LSP-PING before term DROP-AND-COUNT
+```
+We need to add the control port for BFD, before this we was using only the echo port. The BFD depends of the LSP ping also, so, we need to permit this in the RE filter. 
+```
+set protocols mpls label-switched-path R1-R8-A to 10.0.0.8
+set protocols mpls label-switched-path R1-R8-A priority 7 7
+set protocols mpls label-switched-path R1-R8-A oam bfd-liveness-detection minimum-interval 3000
+set protocols mpls label-switched-path R1-R6-A to 10.0.0.6
+set protocols mpls label-switched-path R1-R6-A priority 7 7
+set protocols mpls label-switched-path R1-R6-A oam bfd-liveness-detection minimum-interval 3000
+```
+Note, by default the hold value on Junos will be 0, with this, even if we have a LSP with a best priority value, the preemption will not occur because the hold value is 0. We need to guarantee that our hold value is the worse, that's why the hold value need to be changed. 
+
+With this, we'll have the LSPs and BFD sessions established! 
+```
+root@R1> show mpls lsp ingress 
+Ingress LSP: 2 sessions
+To              From            State Rt P     ActivePath       LSPname
+10.0.0.6        10.0.0.1        Up     0 *                      R1-R6-A
+10.0.0.8        10.0.0.1        Up     0 *                      R1-R8-A
+Total 2 displayed, Up 2, Down 0
+
+root@R1> show bfd session 
+                                                  Detect   Transmit
+Address                  State     Interface      Time     Interval  Multiplier
+10.0.0.6                 Up                       9.000     3.000        3   
+10.0.0.8                 Up                       9.000     3.000        3  
+```
+
+
+
