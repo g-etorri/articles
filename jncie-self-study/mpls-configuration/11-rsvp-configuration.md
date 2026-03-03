@@ -30,30 +30,30 @@ root@R1> show rsvp interface ae0.0 detail | match Hello
 Ok, with the RSVP configured in all interfaces, let's color the interfaces, using admin-groups! We'll do it following the table below:
 | Router | Interface  | Admin Group  |
 | ------ | ---------- | ------------ |
-| R1     | ge-0/0/2.0 | blue         |
-| R1     | ge-0/0/3.0 | orange       |
-| R1     | ae0.0      | blue, orange |
-| R2     | ge-0/0/2.0 | blue         |
-| R2     | ge-0/0/2.0 | orange       |
-| R2     | ae0.0      | blue, orange |
-| R3     | ge-0/0/2.0 | blue         |
-| R3     | ge-0/0/3.0 | orange       |
-| R3     | ge-0/0/4.0 | blue, orange |
-| R4     | ge-0/0/2.0 | blue         |
-| R4     | ge-0/0/3.0 | orange       |
-| R4     | ge-0/0/4.0 | blue, orange |
-| R5     | ge-0/0/2.0 | blue         |
-| R5     | ge-0/0/3.0 | orange       |
-| R5     | ae0.0      | blue, orange |
-| R6     | ge-0/0/2.0 | blue         |
-| R6     | ge-0/0/3.0 | orange       |
-| R6     | ae0.0      | blue. orange |
-| R7     | ge-0/0/2.0 | blue         |
-| R7     | ge-0/0/3.0 | orange       |
-| R7     | ge-0/0/4.0 | blue. orange |
-| R8     | ge-0/0/2.0 | blue         |
-| R8     | ge-0/0/3.0 | orange       |
-| R8     | ge-0/0/4.0 | blue.orange  |
+| R1| ge-0/0/2.0 | blue         |
+| R1| ge-0/0/3.0 | orange       |
+| R1| ae0.0      | blue, orange |
+| R2| ge-0/0/2.0 | blue         |
+| R2| ge-0/0/2.0 | orange       |
+| R2| ae0.0      | blue, orange |
+| R3| ge-0/0/2.0 | blue         |
+| R3| ge-0/0/3.0 | orange       |
+| R3| ge-0/0/4.0 | blue, orange |
+| R4| ge-0/0/2.0 | blue         |
+| R4| ge-0/0/3.0 | orange       |
+| R4| ge-0/0/4.0 | blue, orange |
+| R5| ge-0/0/2.0 | blue         |
+| R5| ge-0/0/3.0 | orange       |
+| R5| ae0.0      | blue, orange |
+| R6| ge-0/0/2.0 | blue         |
+| R6| ge-0/0/3.0 | orange       |
+| R6| ae0.0      | blue. orange |
+| R7| ge-0/0/2.0 | blue         |
+| R7| ge-0/0/3.0 | orange       |
+| R7| ge-0/0/4.0 | blue. orange |
+| R8| ge-0/0/2.0 | blue         |
+| R8| ge-0/0/3.0 | orange       |
+| R8| ge-0/0/4.0 | blue.orange  |
 Again, I'll do this in R1 and apply similarly in the other routers of our network:
 ```
 set protocols mpls admin-groups orange 0
