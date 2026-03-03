@@ -54,6 +54,7 @@ Ok, with the RSVP configured in all interfaces, let's color the interfaces, usin
 | R8| ge-0/0/2.0 | blue         |
 | R8| ge-0/0/3.0 | orange       |
 | R8| ge-0/0/4.0 | blue.orange  |
+
 Again, I'll do this in R1 and apply similarly in the other routers of our network:
 ```
 set protocols mpls admin-groups orange 0
