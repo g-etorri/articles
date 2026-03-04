@@ -138,3 +138,74 @@ Ok, with the LSPs established, we need to learn some tasks of traffic engineerin
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
+
+Ok, let's start becoming our network invisible to the external traceroutes. To do this, we need to not propagate the TTL in the P routers, in the traceroute we'll se only the ingress and egress routers. 
+```
+set protocols mpls no-propagate-ttl
+```
+This is simple, if you remember, in the BGP chapter I make the configurations after do the MPLS configuration, so, here I will show you the result of the no-propagate-ttl. And a result of a traceroute inside our network.  
+```
+root@IX-1> traceroute 201.5.1.3 
+traceroute to 201.5.1.3 (201.5.1.3), 30 hops max, 40 byte packets
+ 1  192.168.12.1 (192.168.12.1)  17.072 ms  7.998 ms  12.781 ms
+ 2  10.200.0.18 (10.200.0.18)  16.269 ms  14.920 ms  16.598 ms
+ 3  172.16.5.6 (172.16.5.6)  13.277 ms  7.503 ms 201.5.1.3 (201.5.1.3)  9.112 ms
+
+root@R1> traceroute 10.0.0.5 propagate-ttl 
+traceroute to 10.0.0.5 (10.0.0.5), 30 hops max, 52 byte packets
+ 1  r4.ge0-0-2.0.jncie.lab (10.200.0.3)  6.381 ms  17.889 ms  13.717 ms
+ 2  r5.jncie.lab (10.0.0.5)  21.333 ms  123.781 ms  61.681 ms
+```
+Basically, the traceroute show our ingress router R1, and the egress router R5, and finally, the CE5-3. In the traceroute that I made on R1, we can see that we have de R4 as a P router. 
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* Configure LSPs to be established trough specific color in backbone
+* Configure explicit-paths to establish the LSPs trough specific path
+* Signal specific bandwidth in some LSPs
+* Configure auto-bandiwitdh in some LSPs
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
+Now, let's specify some LSPs to be established in specific colored paths. The LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A will be established trough orange links, and the LSPs R1-R8-A, R8-R1-A, R4-R5-A e R5-R4-A trough blue links. The configuration is very simple:
+```
+set protocols mpls label-switched-path R2-R7-A admin-group include-any orange
+set protocols mpls label-switched-path R3-R6-A admin-group include-any orange
+set protocols mpls label-switched-path R6-R3-A admin-group include-any orange
+set protocols mpls label-switched-path R7-R2-A admin-group include-any orange
+
+set protocols mpls label-switched-path R1-R8-A admin-group include-any blue
+set protocols mpls label-switched-path R8-R1-A admin-group include-any blue
+set protocols mpls label-switched-path R4-R5-A admin-group include-any blue
+set protocols mpls label-switched-path R5-R4-A admin-group include-any blue
+```
+
+Now, let's verify a specific LSP to check what is the path computed. 
+```
+root@R1> show mpls lsp name R1-R8-A extensive                        
+Ingress LSP: 2 sessions
+
+10.0.0.8
+  From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R8-A, LSPid: 9
+  ActivePath:  (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary                    State: Up
+    Priorities: 6 6
+    SmartOptimizeTimer: 180
+          Include Any: blue
+    Flap Count: 0
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.1 S 10.200.0.9 S 10.200.0.23 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.1(Label=157) 10.200.0.9(Label=71) 10.200.0.23(Label=3)
+```
+In this output we can see that we have the admin-group defined, and the path computed we can check the topology image, the path is R1 -> R2 -> R7 -> R8. 
