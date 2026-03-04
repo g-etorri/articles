@@ -208,4 +208,169 @@ Ingress LSP: 2 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.1(Label=157) 10.200.0.9(Label=71) 10.200.0.23(Label=3)
 ```
-In this output we can see that we have the admin-group defined, and the path computed we can check the topology image, the path is R1 -> R2 -> R7 -> R8. 
+In this output we can see that we have the admin-group defined, and the path computed trough blue links, we can check the topology image to check, the path is R1 -> R2 -> R7 -> R8. 
+
+Ok, this task is finished too!!!
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* Configure explicit-paths to establish the LSPs trough specific path
+* Signal specific bandwidth in some LSPs
+* Configure auto-bandiwitdh in some LSPs
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
+Now, let's do some EPs. Here, we have a situation between R3 and R8, we need to guarantee that the two LSPs in each router uses two differents paths, we can't use admin-groups and each explicit-path must have only 3 hops. 
+
+With the situation defined, I'll create two paths, path north and south! 
+R3:
+```
+set protocols mpls path r8-via-north 10.0.0.2
+set protocols mpls path r8-via-north 10.0.0.1
+set protocols mpls path r8-via-north 10.0.0.8
+set protocols mpls path r8-via-south 10.0.0.6
+set protocols mpls path r8-via-south 10.0.0.7
+set protocols mpls path r8-via-south 10.0.0.8
+set protocols mpls label-switched-path R3-R8-A primary r8-via-north
+set protocols mpls label-switched-path R3-R8-B primary r8-via-south
+```
+R8:
+```
+set protocols mpls path r3-via-north 10.0.0.1
+set protocols mpls path r3-via-north 10.0.0.2
+set protocols mpls path r3-via-north 10.0.0.3
+set protocols mpls path r3-via-south 10.0.0.5
+set protocols mpls path r3-via-south 10.0.0.4
+set protocols mpls path r3-via-south 10.0.0.3
+set protocols mpls label-switched-path R8-R3-A primary r3-via-north
+set protocols mpls label-switched-path R8-R3-B primary r3-via-south
+```
+Ok, let's check the LSP now:
+```
+root@R3> show mpls lsp name R3-R8-* detail 
+Ingress LSP: 3 sessions
+
+10.0.0.8
+  From: 10.0.0.3, State: Up, ActiveRoute: 0, LSPname: R3-R8-A, LSPid: 5
+  ActivePath: r8-via-north (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary   r8-via-north     State: Up
+    Priorities: 7 7
+    SmartOptimizeTimer: 180
+    Flap Count: 1
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.6 S 10.200.0.0 S 10.200.0.5 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.6(Label=161) 10.200.0.0(Label=131) 10.200.0.5(Label=3)
+
+10.0.0.8
+  From: 10.0.0.3, State: Up, ActiveRoute: 0, LSPname: R3-R8-B, LSPid: 6
+  ActivePath: r8-via-south (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary   r8-via-south     State: Up
+    Priorities: 7 7
+    SmartOptimizeTimer: 180
+    Flap Count: 1
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 30)
+ 10.200.0.13 S 10.200.0.21 S 10.200.0.23 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.13(Label=75) 10.200.0.21(Label=74) 10.200.0.23(Label=3)
+```
+In the output we can see the explicit-path designed, and the computed ERO accordingly we have expected. So, this is a sucess case! 
+
+Now, to make the things more interesting, let's do a mix of explicit-path and admin-groups! Between R4 and R7 we have two pair of LSPs in each router, the LSP from R7 to R4 must use orange links, and the LSPs from R4 to R7 must use the blue links, but in this case, we need to ensure that the LSPs use different paths to egress routers. Let's go.
+R4:
+```
+set protocols mpls path r7-ep1 10.0.0.3
+set protocols mpls path r7-ep2 10.0.0.1
+set protocols mpls label-switched-path R4-R7-A primary r7-ep1
+set protocols mpls label-switched-path R4-R7-A admin-group include-any blue
+set protocols mpls label-switched-path R4-R7-B primary r7-ep2
+set protocols mpls label-switched-path R4-R7-B admin-group include-any blue
+```
+R7:
+```
+set protocols mpls path r4-ep1 10.0.0.8
+set protocols mpls path r4-ep2 10.0.0.2
+set protocols mpls label-switched-path R7-R4-A admin-group include-any orange
+set protocols mpls label-switched-path R7-R4-A primary r4-ep1
+set protocols mpls label-switched-path R7-R4-B admin-group include-any orange
+set protocols mpls label-switched-path R7-R4-B primary r4-ep2
+```
+To ensure that LSPs uses different paths, we can use a explicit path with only one hop, so that we are changing the first hop of the LSP only, and so on the LSPs will be computed using the best IGP path from de first hop. 
+
+Let's check the results:
+```
+root@R4> show mpls lsp name R4-R7* detail       
+Ingress LSP: 3 sessions
+
+10.0.0.7
+  From: 10.0.0.4, State: Up, ActiveRoute: 0, LSPname: R4-R7-A, LSPid: 5
+  ActivePath: r7-ep1 (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary   r7-ep1           State: Up
+    Priorities: 7 7
+    SmartOptimizeTimer: 180
+          Include Any: blue
+    Flap Count: 0
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 45)
+ 10.200.0.10 S 10.200.0.13 S 10.200.0.16 S 10.200.0.19 S 10.200.0.22 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.10(Label=389) 10.200.0.13(Label=76) 10.200.0.16(Label=78) 10.200.0.19(Label=65) 10.200.0.22(Label=3)
+
+10.0.0.7                                
+  From: 10.0.0.4, State: Up, ActiveRoute: 0, LSPname: R4-R7-B, LSPid: 6
+  ActivePath: r7-ep2 (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary   r7-ep2           State: Up
+    Priorities: 7 7
+    SmartOptimizeTimer: 180
+          Include Any: blue
+    Flap Count: 0
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.2 S 10.200.0.1 S 10.200.0.9 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.2(Label=132) 10.200.0.1(Label=162) 10.200.0.9(Label=3)
+```
+In the output we can see the different paths computed trough blue links! In the LSP R4-R7-A the path is R3 -> R6 -> R5-> R8 -> R7, and in the LSP R4-R7-B the path is R1 -> R2 -> R7. 
+
+Everything looks good so far. 
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* Signal specific bandwidth in some LSPs
+* Configure auto-bandiwitdh in some LSPs
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
