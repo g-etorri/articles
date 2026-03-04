@@ -126,15 +126,15 @@ Address                  State     Interface      Time     Interval  Multiplier
 10.0.0.8                 Up                       9.000     3.000        3  
 ```
 
-Now, let's define the admin-groups of each LSP, half of the LSPs wil go by blue, and another half go by orange: 
-```
-set protocols mpls label-switched-path R2-R7-A admin-group include-any orange
-set protocols mpls label-switched-path R3-R6-A admin-group include-any orange
-set protocols mpls label-switched-path R6-R3-A admin-group include-any orange
-set protocols mpls label-switched-path R7-R2-A admin-group include-any orange
-set protocols mpls label-switched-path R1-R8-A admin-group include-any blue
-set protocols mpls label-switched-path R8-R1-A admin-group include-any blue
-set protocols mpls label-switched-path R4-R5-A admin-group include-any blue
-set protocols mpls label-switched-path R5-R4-A admin-group include-any blue
-```
-
+Ok, with the LSPs established, we need to learn some tasks of traffic engineering. So, let's simulate some situations to take the actions.
+* Become the network invisible for the external traceroutes
+* Configure LSPs to be established trough specific color in backbone
+* Configure explicit-paths to establish the LSPs trough specific path
+* Signal specific bandwidth in some LSPs
+* Configure auto-bandiwitdh in some LSPs
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
