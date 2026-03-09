@@ -374,3 +374,125 @@ Updating the tasks in our network:
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
+Now, let's configure the bandwitdth reserve in some LSPs, let's apply a reserve of 60Mbps on LSP R1-R8-A, R8-R1-A, R4-R5-A and R5-R4-A. 
+In the R1, let's add only one line, and we can repplicate similarly on the other routers. 
+```
+set protocols mpls label-switched-path R1-R6-A bandwidth 60m
+```
+Let's check the outputs now. 
+
+In R1, we can see that our LSP is established. 
+```
+10.0.0.6
+  From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R6-A, LSPid: 4
+  ActivePath:  (primary)
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary                    State: Up
+    Priorities: 7 7
+    Bandwidth: 60Mbps
+    SmartOptimizeTimer: 180
+    Flap Count: 0
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.1 S 10.200.0.9 S 10.200.0.20 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.1(Label=57) 10.200.0.9(Label=44) 10.200.0.20(Label=3)
+```
+Here we can see that we have the bandwidth reserved in the path correctly, but how we can know this? If the LSP is established, the path have bandwitdh sufficient hahah. Let's view in the transit routers. 
+```
+root@R2> show rsvp session name R1-R6-A detail 
+Transit RSVP: 13 sessions
+
+10.0.0.6
+  From: 10.0.0.1, LSPstate: Up, ActiveRoute: 0
+  LSPname: R1-R6-A, LSPpath: Primary
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 44
+  Resv style: 1 FF, Label in: 57, Label out: 44
+  Time left: 6184, Since: Mon Mar  9 14:17:26 2026
+  Tspec: rate 60Mbps size 60Mbps peak Infbps m 20 M 1500
+  Port number: sender 1 receiver 47468 protocol 0
+  PATH rcvfrom: 10.200.0.0 (ae0.0) 1 pkts
+  Adspec: received MTU 1500 sent MTU 1500
+  PATH sentto: 10.200.0.9 (ge-0/0/2.0) 1 pkts
+  RESV rcvfrom: 10.200.0.9 (ge-0/0/2.0) 1 pkts, Entropy label: Yes
+  Explct route: 10.200.0.9 10.200.0.20 
+  Record route: 10.200.0.0 <self> 10.200.0.9 10.200.0.20  
+Total 1 displayed, Up 1, Down 0
+
+root@R2> show rsvp interface ae0.0 extensive 
+ae0.0 Index 326, State Ena/Up
+  Authentication, Aggregate, Reliable, LinkProtection
+  HelloInterval 9(second)
+  Address 10.200.0.1
+  ActiveResv 10, PreemptionCnt 0, MaxResvTh 0bps, 0% 
+  Update threshold 10.000%, UpdateThresholdValue 200Mbps
+  Subscription 100%, Actual 100%
+  bc0 = ct0, StaticBW 2Gbps
+  ct0: StaticBW 2Gbps, AvailableBW 1.94Gbps
+    MaxAvailableBW 2Gbps = (bc0*subscription)
+    ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 0bps[7] 60Mbps       
+```
+Here we can see that in the interface ae0.0 the R2 have 2Gbps of total bandwidth available and 60Mbps was reserved, by our LSP! 
+
+Everything is ok! Now, we can go for the next task.
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* Configure auto-bandwitdh in some LSPs
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
+Now, let's configure the auto-bandwitdh feature in some LSPs!!! We'll configure this on the LSPs R1-R8-A, R8-R1-A, R4-R5-A e R5-R4-A.
+Here I am configuring in the R1, and we can repplicate on the other routers. For this function, we need to create a file and configure the auto-bandwidth knob, with this, the router will collect the average bandwitdh of the LSPs with auto-bandwidth configured, and will can change the bandidth signaled accordingly the necessity. 
+```
+set protocols mpls statistics file auto-bw
+set protocols mpls statistics auto-bandwidth
+set protocols mpls label-switched-path R1-R8-A auto-bandwidth adjust-interval 172800
+set protocols mpls label-switched-path R1-R8-A auto-bandwidth minimum-bandwidth 30m
+set protocols mpls label-switched-path R1-R8-A auto-bandwidth maximum-bandwidth 120m
+```
+In this configuration, we are saying to the router adjust the bandwith in each 48 hours, and the LSPs can have the minimum of 30Mbps signalled and the maximum of 120Mbps signalled. So, with time the bandwidth will vary between 30Mbps and 120Mbps accordingly the average bandwitdh collected by the router. 
+```
+10.0.0.8
+  From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R8-A, LSPid: 2
+  ActivePath: (primary)
+  Link protection desired
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Autobandwidth 
+  MinBW: 30Mbps, MaxBW: 120Mbps
+  AdjustTimer: 172800 secs 
+  Max AvgBW util: 310.853bps, **Bandwidth Adjustment in 88756 second(s).**
+  Overflow limit: 0, Overflow sample count: 0
+  Underflow limit: 0, Underflow sample count: 280, Underflow Max AvgBW: 310.853bps
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary             State: Up
+    Priorities: 7 7
+    **Bandwidth: 30Mbps**
+    SmartOptimizeTimer: 180
+          Include Any: blue
+    Flap Count: 0                       
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.1 S 10.200.0.9 S 10.200.0.23 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+```
+In the output, we can see that we don't have any increase of the bandwitdh beyond the 30Mbps, so this LSPs is signalled with 30Mbps only, and the next adjust will be realized in 88756 seconds. 
+
+
+
