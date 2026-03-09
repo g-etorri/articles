@@ -475,14 +475,14 @@ In this configuration, we are saying to the router adjust the bandwith in each 4
   Autobandwidth 
   MinBW: 30Mbps, MaxBW: 120Mbps
   AdjustTimer: 172800 secs 
-  Max AvgBW util: 310.853bps, **Bandwidth Adjustment in 88756 second(s).**
+  Max AvgBW util: 310.853bps, Bandwidth Adjustment in 88756 second(s).
   Overflow limit: 0, Overflow sample count: 0
   Underflow limit: 0, Underflow sample count: 280, Underflow Max AvgBW: 310.853bps
   Encoding type: Packet, Switching type: Packet, GPID: IPv4
   LSP Self-ping Status : Enabled
  *Primary             State: Up
     Priorities: 7 7
-    **Bandwidth: 30Mbps**
+    Bandwidth: 30Mbps
     SmartOptimizeTimer: 180
           Include Any: blue
     Flap Count: 0                       
@@ -494,5 +494,94 @@ In this configuration, we are saying to the router adjust the bandwith in each 4
 ```
 In the output, we can see that we don't have any increase of the bandwitdh beyond the 30Mbps, so this LSPs is signalled with 30Mbps only, and the next adjust will be realized in 88756 seconds. 
 
+Ok, autobandwitdh configured also. We can go to the next task!!
 
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* Change the priority and hold value to make some LSPs priority in the backbone
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
 
+Do you rememeber that before start the tasks, we defined a standard model of LSP with the priority and hold value of 7? It's time to prefer some LSPs in our network!
+
+In the LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R8-R3-A, R3-R8-A, R3-R6-A, R6-R3-A, R4-R5-A e R5-R4-A we'll define the priority and hold value of 6. Again, I'll configure in R1 and you can repplicate on the other routers. 
+```
+set protocols mpls label-switched-path R1-R8-A priority 6 6
+```
+This way, if we have a issue with resources in a interface, the LSP with the minor value of priority will be preferred, and the hold value will define if the LSPs current estalblished will be preempted or not. If the value of hold is equal, the LSP established will be established until a recomputation, if the hold value of our LSP is less than the LSP established, a preemption will occur. 
+
+Let's see the priority and the reservation of this LSP in practice. 
+```
+10.0.0.8
+  From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R8-A, LSPid: 2
+  ActivePath: primary (primary)
+  Link protection desired
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Autobandwidth 
+  MinBW: 30Mbps, MaxBW: 120Mbps
+  AdjustTimer: 172800 secs 
+  Max AvgBW util: 434.413bps, Bandwidth Adjustment in 83954 second(s).
+  Overflow limit: 0, Overflow sample count: 0
+  Underflow limit: 0, Underflow sample count: 297, Underflow Max AvgBW: 434.413bps
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary             State: Up
+    Priorities: 6 6
+    Bandwidth: 30Mbps
+    SmartOptimizeTimer: 180
+          Include Any: blue
+    Flap Count: 0                       
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.1 S 10.200.0.9 S 10.200.0.23 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+```
+In the output we can see the priority and hold values, defined as 6. 
+
+Now, in R2 we can see the bandwitdh reservation
+```
+root@R2> show rsvp interface ae0.0 detail 
+ae0.0 Index 326, State Ena/Up
+  Authentication, Aggregate, Reliable, LinkProtection
+  HelloInterval 9(second)
+  Address 10.200.0.1
+  ActiveResv 10, PreemptionCnt 0, MaxResvTh 0bps, 0% 
+  Update threshold 10.000%, UpdateThresholdValue 200Mbps
+  Subscription 100%, StaticBW 2Gbps, AvailableBW 1.91Gbps, Actual 100%
+  ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 30Mbps[7] 60Mbps
+```
+Note that the reservation of the LSP occurs in another "queue", for the LSPs with priority 6, this behavior allows us to have flexiblity in TE!!! It's amazing. 
+
+Ok, now we have LSPs with different priorities in our network, simulating different SLAs as a service. 
+
+Let's follow for the tasks. 
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
+* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
+* Configure an automatic otimization of the LSPs
+* Configure a secondary path for the LSPs, without double the reserved bandwidth. 
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
+Now, we have another mission, to make our network smoothly during the convergence. Thinkwith me now, if we have a resource issue in interface, where we have a LSP with a minor priority wanting to establish, and we have a LSP with the priority and hold value less than this LSP. The LSP currently established will be torned down. This could be a problem for our customers, that could have a traffic loss. To avoid this problem, we can add the soft-preemption knob in our LSPs, with this, the router that have the resource inssuficient can send a preemption pending message to the ingress router, then, the ingress router will compute the LSPs trough another path, without traffic loss. 
+
+This configuration is very simple, and we'll apply this in all LSPs of our network. 
+```
+set protocols mpls label-switched-path R1-R8-A soft-preemption
+```
