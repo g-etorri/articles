@@ -616,3 +616,170 @@ Updating the tasks in our network:
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
+
+Now, to optimize the LSPs periodically, we can include a simple configuration in the routers. 
+```
+set protocols mpls optimize-timer 28800
+```
+This way, our routers will optimize every LSP each 8 hours. Optimization is basically a recomputation of the LSP, if we have a best path, the LSP will be computed by this path, if not, the LSP will continue established in the current path. 
+
+Here we can see the output with de reoptimization configured. 
+```
+10.0.0.6
+  From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R6-A, LSPid: 5
+  ActivePath: (primary)
+  FastReroute desired
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  LSP Self-ping Status : Enabled
+ *Primary              State: Up
+    Priorities: 7 7
+    Bandwidth: 60Mbps
+    OptimizeTimer: 28800
+    SmartOptimizeTimer: 180
+    Flap Count: 0
+    MBB Count: 0
+    Reoptimization in 28491 second(s).
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.1 S 10.200.0.9 S 10.200.0.20 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.200.0.1(flag=9 Label=58) 10.200.0.9(flag=1 Label=45) 10.200.0.20(Label=3)
+```
+The optimize value is 28800 fixed, this situation is different than in the LSPs with auto-bandwidth that are optimized considering his average bandwidth. This knob will optimize all LSPs with the actual bandwitdh signalled and searching for a best path, or, without bandwidth signalled, only for a best path. 
+
+Everything is ok!!! Let's follow for the next tasks.
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
+* ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
+* ~~Configure an automatic otimization of the LSPs.~~
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
+
+Now, to install different FECs like the prefix of IX done in LDP. We'll install this prefix using RSVP LSPs. In this case, let's configure to R5 and R6 install this prefix in FIB preferring the RSVP LSP, this situation happen naturally because the preference of RSVP before LDP. 
+```
+set protocols mpls label-switched-path R5-R2-A install 192.168.12.0/24
+set protocols mpls label-switched-path R6-R1-A install 192.168.12.0/24
+```
+Let's confirm this in the output:
+```
+root@R5> show route 192.168.12.1 active-path table inet.3 
+
+inet.3: 20 destinations, 27 routes (8 active, 0 holddown, 16 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.168.12.0/24    *[RSVP/7/1] 4d 00:09:48, metric 25
+                    >  to 10.200.0.17 via ae0.0, label-switched-path R5-R2-A
+```
+This way, when we have a packet with destination in the IX domain, the R5 will use this LSP to forward the traffic. 
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes.~~
+* ~~Configure LSPs to be established trough specific color in backbone.~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
+* ~~Signal specific bandwidth in some LSPs.~~
+* ~~Configure auto-bandwitdh in some LSPs.~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+* ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
+* ~~Configure an automatic otimization of the LSPs.~~
+* ~~Install different FECs in the FIB using LSPs RSVP.~~
+* Connect the LDP islands with ldp-tunneling in the LSPs.
+* Make traffic policies using LSPs to select the path for specific destinations.
+
+Now, let's connect our LDP islands! Then, we'll have full connectivity via LDP. This task can be accomplished configuring ldp-tunneling in the LSPs that cross the LDP islands, here I'm making this in the R1, that have two LSPs established until the other LDP island. To guarantee this technique, we need to configure the interface lo0.0 in the protocols LDP also, I do it before to permit the target LDP sessions for L2VPNs Martini, and this is useful in this cenario also. 
+```
+set protocols mpls label-switched-path R1-R8-A ldp-tunneling
+set protocols mpls label-switched-path R1-R6-A ldp-tunneling
+
+set protocols mpls label-switched-path R6-R1-A ldp-tunneling
+set protocols mpls label-switched-path R8-R1-A ldp-tunneling
+```
+Let's see the outputs:
+```
+root@R1> show ldp database session 10.0.0.8 
+Input label database, 10.0.0.1:0--10.0.0.8:0
+Labels received: 11
+  Label     Prefix
+     35      10.0.0.1/32
+     36      10.0.0.2/32
+     26      10.0.0.3/32
+     27      10.0.0.4/32
+     23      10.0.0.5/32
+     24      10.0.0.6/32
+     22      10.0.0.7/32
+      0      10.0.0.8/32
+     37      192.168.12.0/24
+
+Output label database, 10.0.0.1:0--10.0.0.8:0
+Labels advertised: 10
+  Label     Prefix
+      0      10.0.0.1/32
+     30      10.0.0.2/32
+     32      10.0.0.3/32
+     31      10.0.0.4/32
+     33      10.0.0.5/32
+     35      10.0.0.6/32                
+     46      10.0.0.7/32
+     53      10.0.0.8/32
+      0      192.168.12.0/24
+```
+Here we can see that R1 and R8 are exchaning the LDP mapping messages with all FECs of our network. To view the LDP interconnection working, we can see in the R1 the route for R7. Theoretically, our traffic must go to R2, then R7 via LDP! 
+```
+root@R1> traceroute mpls ldp 10.0.0.7 no-resolve detail 
+  Probe options: ttl 64, retries 3, wait 10, paths 16, exp 7, fanout 16
+
+  Hop 10.200.0.1 Depth 1
+    Probe status: Success
+    Parent: (null)
+    Return code: Return code is set per DDMT, FEC change at stack-depth 1
+    Response time: 0.00 msec
+    MTU: Unknown
+    Multipath type: IP bitmask
+      Address Range 1: 127.0.0.64 ~ 127.0.0.127
+    Label Stack:
+      Label 1 Value 45 Protocol LDP
+    FEC-Stack-Sent: LDP
+    FEC-Change-Recieved: PUSH-RSVP 
+
+  Hop 10.200.0.0 Depth 2
+    Probe status: Egress
+    Parent: 10.200.0.1
+    Return code: Egress-ok at stack-depth 1
+    Response time: 0.00 msec
+    MTU: 9216
+    Multipath type: IP bitmask
+      Address Range 1: 127.0.0.64 ~ 127.0.0.127
+    Label Stack:                        
+      Label 1 Value 61 Protocol RSVP-TE
+      Label 2 Value 0 Protocol LDP
+    FEC-Stack-Sent: RSVP,LDP
+    FEC-Change-Recieved: POP-RSVP 
+
+  Hop 10.200.0.0 Depth 2
+    Probe status: Egress
+    Parent: 10.200.0.1
+    Return code: Egress-ok at stack-depth 1
+    Response time: 0.00 msec
+    MTU: 9216
+    Multipath type: IP bitmask
+      Address Range 1: 127.0.0.64 ~ 127.0.0.127
+    Label Stack:
+      Label 1 Value 61 Protocol RSVP-TE
+      Label 2 Value 0 Protocol LDP
+    FEC-Stack-Sent: LDP
+
+
+  Path 1 via ae0.0 destination 127.0.0.64
+
+root@R2> show route table mpls.0 label 45 detail | match "operation"   
+                Label operation: Swap 0, Push 93(top)
+```
+And voilà!!! Our LDP interconnection is working now. You can see in the traceroute that RSVP label is pushed and popped by R2, because in the RSVP we don't have the explicit-null configured, but in LDP yes, so R2 pop the RSVP label, then, swap the LDP label sended by R1 to 0 and forward to R7. 
