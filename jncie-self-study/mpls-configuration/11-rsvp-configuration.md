@@ -778,8 +778,67 @@ root@R1> traceroute mpls ldp 10.0.0.7 no-resolve detail
 
 
   Path 1 via ae0.0 destination 127.0.0.64
-
-root@R2> show route table mpls.0 label 45 detail | match "operation"   
-                Label operation: Swap 0, Push 93(top)
 ```
 And voilà!!! Our LDP interconnection is working now. You can see in the traceroute that RSVP label is pushed and popped by R2, because in the RSVP we don't have the explicit-null configured, but in LDP yes, so R2 pop the RSVP label, then, swap the LDP label sended by R1 to 0 and forward to R7. 
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes.~~
+* ~~Configure LSPs to be established trough specific color in backbone.~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
+* ~~Signal specific bandwidth in some LSPs.~~
+* ~~Configure auto-bandwitdh in some LSPs.~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+* ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
+* ~~Configure an automatic otimization of the LSPs.~~
+* ~~Install different FECs in the FIB using LSPs RSVP.~~
+* ~~Connect the LDP islands with ldp-tunneling in the LSPs.~~
+* Make traffic policies using LSPs to select the path for specific destinations.
+
+Now, let's pick an example of forwarding accordingly the destination using MPLS! In this scenario, let's use our Provider 1, or most known as P1. P1 wants to communicate with P2 and P3, that are connected on R3. Between R8 and R3 we have two LSPs, so, in this case we'll load-balance the traffic between the LSPs. 
+The traffic of P1 to P2 will use LSP R8-A3-A and the traffic to P3 will use the R8-R3-B.
+```
+set policy-options policy-statement load-balance-lsp term P2 from protocol bgp
+set policy-options policy-statement load-balance-lsp term P2 from community P2
+set policy-options policy-statement load-balance-lsp term P2 then install-nexthop lsp R8-R3-A
+set policy-options policy-statement load-balance-lsp term P3 from protocol bgp
+set policy-options policy-statement load-balance-lsp term P3 from community P3
+set policy-options policy-statement load-balance-lsp term P3 then install-nexthop lsp R8-R3-B
+```
+We can add this terms to our load-balance policy applied in the forwarding-table, now let's take a look in the RIB/FIB:
+```
+root@R8> show route protocol bgp community 65020:65502 
+
+inet.0: 221 destinations, 225 routes (218 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+200.2.0.0/24       *[BGP/170] 4d 01:30:45, localpref 100, from 10.0.0.0
+                      AS path: 65502 I, validation-state: unverified
+                       to 10.200.0.4 via ge-0/0/3.0, label-switched-path R8-R3-A
+...                               
+root@R8> show route protocol bgp community 65020:65503    
+
+inet.0: 221 destinations, 225 routes (218 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+200.3.0.0/24       *[BGP/170] 4d 01:30:48, localpref 100, from 10.0.0.0
+                      AS path: 65503 I, validation-state: unverified
+                       to 10.200.0.18 via ge-0/0/2.0, label-switched-path R8-R3-B
+...
+```
+And, mission accomplished!!!
+
+We have concluded all the tasks. 
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes.~~
+* ~~Configure LSPs to be established trough specific color in backbone.~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
+* ~~Signal specific bandwidth in some LSPs.~~
+* ~~Configure auto-bandwitdh in some LSPs.~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+* ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
+* ~~Configure an automatic otimization of the LSPs.~~
+* ~~Install different FECs in the FIB using LSPs RSVP.~~
+* ~~Connect the LDP islands with ldp-tunneling in the LSPs.~~
+* ~~Make traffic policies using LSPs to select the path for specific destinations.~~
+
+See you in the next article to configure the protection in our RSVP LSPs!!!
