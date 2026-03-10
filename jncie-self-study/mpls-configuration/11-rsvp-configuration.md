@@ -585,3 +585,34 @@ This configuration is very simple, and we'll apply this in all LSPs of our netwo
 ```
 set protocols mpls label-switched-path R1-R8-A soft-preemption
 ```
+We can see if a LSP have this feature implemented, in the RSVP session:
+```
+10.0.0.8
+  From: 10.0.0.1, LSPstate: Up, ActiveRoute: 0
+  LSPname: R1-R8-A, LSPpath: Primary
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 51
+  Resv style: 1 SE, Label in: -, Label out: 51
+  Time left:    -, Since: Fri Mar  6 15:14:34 2026
+  Tspec: rate 30Mbps size 30Mbps peak Infbps m 20 M 1500
+  Port number: sender 1 receiver 8460 protocol 0
+  Soft preemption desired
+```
+We can see in the output with the "Soft preemption desired". 
+
+Everything is ok!!! Let's follow for the next tasks.
+
+Updating the tasks in our network: 
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
+* ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
+* Configure an automatic otimization of the LSPs
+* Configure a secondary path for the LSPs, without double the reserved bandwidth. 
+* Install different FECs in the FIB using LSPs RSVP
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
