@@ -1,20 +1,20 @@
 # RSVP Protection Configuration
 
-Hello guys, today we'll configure protection in our RSVP LSPs!!!
+Hello guys! Today we're diving deep into configuring protection for our RSVP LSPs.
 
 You already know the topology:
 <img width="1026" height="793" alt="image" src="https://github.com/user-attachments/assets/e0e9790b-3451-461a-8ef7-fa01e680a242" />
 
-This time, I'll list all the tasks that we have to accomplish, like the JNCIE-SP study book. 
-* Configure a backup path in all LSP except in R8-R3-B, R3-R8-B, R7-R4-B and R4-R7-B.
-* Make sure that LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A have a backup path established in advance, before the primary fails.
-* Configure all LSPs to not double the bandwidth with the secondary path.
-* Configure the LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A to not come back to the primary path if fails.
-* Configure the LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A to use fast-reroute, without use bandwidth or admin-group of the primary path. The devour path do not must have more than 5 hops.
-* Configure the LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R3-R6-A, R6-R3-A, R4-R5-A and R5-R4-A to use link-protection mechanism.
-* Configure the LSPs R8-R3-A, R3-R8-A, R7-R4-A and R4-R7-A to use the node-link-protection mechanism.
+Following the JNCIE-SP study style, I’ve listed our core tasks for today:
+* Configure a backup path for all LSPs except: R8-R3-B, R3-R8-B, R7-R4-B, and R4-R7-B.
+* Ensure LSPs R1-R6-A, R6-R1-A, R2-R5-A, and R5-R2-A have a backup path established in advance (before the primary fails).
+* Prevent LSPs from doubling bandwidth reservations when a secondary path is present.
+* Configure LSPs R2-R7-A, R7-R2-A, R3-R6-A, and R6-R3-A to not revert to the primary path after a failure.
+* Set up Fast Reroute (FRR) for LSPs R1-R6-A, R6-R1-A, R2-R5-A, and R5-R2-A without inheriting bandwidth or admin-groups. The detour path must not exceed 5 hops.
+* Apply Link Protection to LSPs: R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R3-R6-A, R6-R3-A, R4-R5-A, and R5-R4-A.
+* Apply Node-Link Protection to LSPs: R8-R3-A, R3-R8-A, R7-R4-A, and R4-R7-A.
 
-So, let's configure a secondary path in all LSPs that we have to do. Here the configuration in R1 and we need to replicate this to the other routers. 
+So, let's configure a secondary path for all the required LSPs. Here is the configuration on R1, which we need to replicate to the other routers:
 ```
 set protocols mpls path primary
 set protocols mpls path secondary
@@ -23,9 +23,9 @@ set protocols mpls label-switched-path R1-R6-A primary primary
 set protocols mpls label-switched-path R1-R8-A secondary secondary
 set protocols mpls label-switched-path R1-R6-A secondary secondary
 ```
-Creating a explicit-path without hops defined, the router calculate the best CSPF path, the secondary path ALWAYS will be totally different than primary.  
+By creating an explicit path without defined hops, the router calculates the best CSPF path. The secondary path will ALWAYS be completely different from the primary.
 
-Now, let's the output to confirm if the secondary path is established correctly. 
+Now, let's check the output to confirm if the secondary path is established correctly.
 ```
 root@R1> show mpls lsp name R1-R6-A detail                                
 Ingress LSP: 2 sessions
@@ -61,15 +61,15 @@ Ingress LSP: 2 sessions
         No computed ERO.
    17 Mar 11 16:29:57.520 Clear Call
 ```
-Here, we have the two paths configured, but the secondary path is not established. The secondary path will be established only if the primary path fails. 
+Here, we have both paths configured, but the secondary path is not established yet. The secondary path will only be established if the primary path fails.
 
-Let's go to the next task. 
+Let's move on to the next task.
 
-Here, we need to apply the standby knob to establish the secondary path together with the primary path. This way improve the convergence time in the network, because if the primary path fails, the secondary path assumes immediatally. A personal advice here, if you want to have a secondary path, include the standby knob, you'll mantain another session established but the convergence time will be improved significantly. 
+Here, we need to apply the standby knob to establish the secondary path alongside the primary. This improves network convergence time because if the primary path fails, the secondary path takes over immediately. A personal piece of advice: if you want a secondary path, include the standby knob. You'll maintain an extra session, but the convergence time will be significantly improved.
 ```
 set protocols mpls label-switched-path R1-R6-A secondary secondary standby
 ```
-Let's check the outputs, here we'll see the difference between the previous output. 
+Let's check the output and see the difference compared to the previous one.
 ```
 root@R1> show mpls lsp name R1-R6-A detail    
 Ingress LSP: 2 sessions
@@ -108,17 +108,17 @@ Ingress LSP: 2 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.3(Label=73) 10.200.0.15(Label=64) 10.200.0.17(Label=3)
 ```
-Now, we have the secondary path established simultaneously with the primary path, trough another path in our network. 
+Now, we have the secondary path established simultaneously with the primary through a different path in our network.
 
-Enjoying the situation, we can see in the output that the two paths are reserving 60Mbps of bandwidth. In other words, this LSPs will reserve 120Mbps in our network if they pass by the same path. This can be considered a waste of resources, because in the final the LSPs needs only 60Mbps. 
+Looking at the output, we can see that both paths are reserving 60Mbps of bandwidth. In other words, these LSPs will reserve 120Mbps in our network if they traverse the same path. This can be considered a waste of resources since, in the end, the LSP only needs 60Mbps.
 
-To avoid this double of bandwidth reservation, we can use a knob that change the reservation style of LSPs. When the LSP is configured with the reservation style Fixed Filter, shown as FF in the outputs, the secondary paths inherits the bandwitdh of the primary path, in other words, reserve the same bandwitdth of the primary path. Adding the adaptive knob in the LSP, the reservation style is changed do Shared Explicit, shown as SE in the output, this style permit to reserve only the necessary bandwidth of the LSPs if the two paths pass trough the same link. 
+To avoid doubling the bandwidth reservation, we can use a knob that changes the LSP reservation style. When an LSP is configured with the Fixed Filter (FF) style, secondary paths inherit the bandwidth of the primary path. By adding the adaptive knob, the reservation style changes to Shared Explicit (SE). This style allows the paths to share the same bandwidth reservation if they pass through the same link.
 ```
 set protocols mpls label-switched-path R1-R6-A adaptive
 ```
-Here I'am setting this configuration on R1, we can replicate this in all our network. 
+I am applying this on R1, and we can replicate it across the entire network.
 
-Simulating a scenario to validate this knob, I isolated the R6 disabling the interfaces to R3 and R7. In the interface ae0.0 will arrive two LSPs, R3-R6-A with the priority 6 and the LSP R1-R6-A that we applied the adaptive knob. 
+Simulating a scenario to validate this: I isolated R6 by disabling the interfaces to R3 and R7. On interface ae0.0, two LSPs will arrive: R3-R6-A and R1-R6-A (where we applied the adaptive knob).
 ```
 root@R6> show rsvp session name R1-* 
 Ingress RSVP: 4 sessions
@@ -141,20 +141,20 @@ ae0.0 Index 325, State Ena/Up
   ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 60Mbps[7] 60Mbps
 ...
 ```
-We can see that we have two RSVP sessions, a session for each path, and in the interface we have only 60Mbps reserved. So, we have success in this task!!!
+We can see two RSVP sessions (one for each path), but the interface only has 60Mbps reserved. Task accomplished!
 
-Now, let's make a dumb decision hahah, but we need to learn some cases, sure. 
-"Configure the LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A to not come back to the primary path if fails."
+Now, let's make a "dumb" decision (haha), but we need to learn these edge cases.
+"Configure LSPs R2-R7-A, R7-R2-A, R3-R6-A, and R6-R3-A to not come back to the primary path if it fails."
 
-Logically, the secondary path is worse than the primary, sometimes the secondary path is not the second best path, this happens because the mechanism of path computation evaluate the primary path of the LSP and focus in compute a path total different of the primary. So, If we have two physical link between two routers, not a LAG, but two physical links trough different streets. The second fiber of this path would be the second path of the CSPF, the secondary path will be computated avoiding this routers, to prevent node fail. But, if the primary fiber torns down, the LSP will converge to the secondary path, then the primary path will be computed by the secondary fiber. And this is the best path, better than the secondary path by the way, if we have the revert-timer defined, by default is defined to 60 seconds, the traffic will be converged to the primary path again, that is trough the secondary fiber, if we don't have the revert-timer, the LSP will forward the traffic trough the secondary path until the secondary path fails, then, the primary path will be active again. 
+Logically, a secondary path is usually worse than the primary. Sometimes, the secondary isn't even the second-best path because the CSPF mechanism focuses on computing a path completely disjoint from the primary to prevent node failure. If the primary path goes down, the traffic moves to the secondary. Once the primary is available again, Junos uses a revert-timer (default is 60 seconds) to move traffic back. By setting this to 0, the LSP will stay on the secondary path until it fails.
 
-You got it, right? I made an effort to explain this, talk to me, please!!
+You get the idea, right? I'm making an effort to explain this, so let me know if it's clear!
 
-Now, let's make this dumb configuration, no way...
+Now, let's apply this configuration:
 ```
 set protocols mpls label-switched-path R2-R7-A revert-timer 0
 ```
-We can see the revert-timer defined in the output, see below: 
+We can see the revert-timer set to 0 in the output below:
 ```
 root@R2> show mpls lsp name R2-R7-A detail 
 Ingress LSP: 2 sessions
@@ -192,21 +192,21 @@ Ingress LSP: 2 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.0.0.1(flag=0x21) 10.200.0.0(flag=1 Label=61) 10.0.0.8(flag=0x21) 10.200.0.5(flag=1 Label=50) 10.0.0.7(flag=0x20) 10.200.0.22(Label=0)
 ```
-With the revert-timer defined in 0, we'll never have a reversion of the path. So, if you prefer this situation, ok, I'll respect you, but I don't agree with this. 
+With the revert-timer set to 0, the path will never revert. If you prefer this behavior, I'll respect it, but I don't necessarily agree with it!
 
-Now, let's make a checkpoint of our tasks, we reached the half of them. 
-* ~~Configure a backup path in all LSP except in R8-R3-B, R3-R8-B, R7-R4-B and R4-R7-B.~~
-* ~~Make sure that LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A have a backup path established in advance, before the primary fails.~~
-* ~~Configure all LSPs to not double the bandwidth with the secondary path.~~
-* ~~Configure the LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A to not come back to the primary path if fails.~~
-* Configure the LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A to use fast-reroute, without use bandwidth or admin-group of the primary path. The devour path do not must have more than 5 hops.
-* Configure the LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R3-R6-A, R6-R3-A, R4-R5-A and R5-R4-A to use link-protection mechanism.
-* Configure the LSPs R8-R3-A, R3-R8-A, R7-R4-A and R4-R7-A to use the node-link-protection mechanism.
+Now, let's do a checkpoint; we’ve reached the halfway point:
+* ~~Configure a backup path for all LSPs except: R8-R3-B, R3-R8-B, R7-R4-B, and R4-R7-B.~~
+* ~~Ensure LSPs R1-R6-A, R6-R1-A, R2-R5-A, and R5-R2-A have a backup path established in advance (before the primary fails).~~
+* ~~Prevent LSPs from doubling bandwidth reservations when a secondary path is present.~~
+* ~~Configure LSPs R2-R7-A, R7-R2-A, R3-R6-A, and R6-R3-A to not revert to the primary path after a failure.~~
+* Set up Fast Reroute (FRR) for LSPs R1-R6-A, R6-R1-A, R2-R5-A, and R5-R2-A without inheriting bandwidth or admin-groups. The detour path must not exceed 5 hops.
+* Apply Link Protection to LSPs: R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R3-R6-A, R6-R3-A, R4-R5-A, and R5-R4-A.
+* Apply Node-Link Protection to LSPs: R8-R3-A, R3-R8-A, R7-R4-A, and R4-R7-A.
 
 Ok, we make more than half of the tasks. 
 
-Let's come back to our goal. 
-First, to achieve all of our goals, we need to include the link-protection in the RSVP interfaces. We can do this in two ways, specifying the link-protection in each interface, or making a group and applying in the RSVP. I prefer the last one. See below:
+Let's get back to our goals.
+First, to achieve the remaining tasks, we need to enable link-protection on the RSVP interfaces. You can do this by specifying it on each interface or by creating a group. I prefer the latter:
 ```
 set protocols rsvp interface ae0.0 link-protection
 set protocols rsvp interface ge-0/0/2.0 link-protection
@@ -216,15 +216,14 @@ set groups rsvp protocols rsvp interface <*> link-protection
 set protocols rsvp apply-groups rsvp
 ```
 
-Ok, with this, we can configure the final three tasks. 
-To make our LSPs to have fast-reroute with 5 hops and not inherits the bandwidth and admin-groups of the LSPs we can use the follow configuration: 
+Now for the final three tasks. To configure LSPs with Fast Reroute, a 5-hop limit, and no inheritance of bandwidth or admin-groups, use the following:
 ```
 set protocols mpls label-switched-path R1-R6-A fast-reroute hop-limit 5
 set protocols mpls label-switched-path R1-R6-A fast-reroute no-include-any
 ```
-Note: By default, Junos uses a limit of 6 hops to fast-reroute. The no-include-any makes the fast-reroute not consider the bandwitdh and admin-groups requirements. 
+Note: By default, Junos uses a 6-hop limit for FRR. The no-include-any ensures FRR ignores the primary path's admin-group requirements.
 
-Now, let's check the outputs:
+Checking the output:
 ```
 root@R1> show rsvp session name R1-R6-A detail 
 Ingress RSVP: 7 sessions
@@ -269,12 +268,11 @@ Ingress RSVP: 7 sessions
     10.200.0.17  
     Label in: 81, Label out: 62
 ```
-We can see the fast-reroute desired, and the detours because that. 
+We can see "FastReroute desired" and the active detours.
 
-Now, let's follow to the link-protection LSPs. 
-You know the difference of link-protection and node-link-protection? 
+Now, let's move on to link-protection. Do you know the difference between link-protection and node-link-protection?
 
-Basically, the link-protection makes a bypass LSPs considering the backbone link as the point of local repair, or PLR. In other words, will be created a Bypass LSP to the next hop avoiding the actual link of the LSP. And the node-link-protection calculate the bypass LSP considering the next node as PLR, so, the LSP will be computated to the next-next-hop.  
+Basically, link-protection creates a bypass LSP considering the link as the Point of Local Repair (PLR). It avoids the specific failed link. Node-link-protection calculates the bypass by considering the next node as the PLR, so the bypass goes to the "next-next-hop."
 
 Link-protection:
 
@@ -284,17 +282,17 @@ Node-link-protection:
 
 <img width="489" height="248" alt="image" src="https://github.com/user-attachments/assets/9b85b185-e1f7-46be-b514-70c1810bdbe9" />
 
-I draw the Bypass LSP as a pipe, because in this cases we have a label stack. So, the main LSP is encapsulated in another MPLS header, the stack is |Bypass LSP Label|Protected LSP Label, if we have a VPN, the VPN label will be the bottom label, or the flow label. Normally, if we have some LSPs with the same PLR, all of theses LSPs are encapsulated in a Bypass LSP. 
+I draw the Bypass LSP as a "pipe" because it uses a label stack. The main LSP is encapsulated in another MPLS header: |Bypass Label|Protected LSP Label|. Usually, multiple LSPs sharing the same PLR are bundled into the same Bypass LSP.
 
-Now, let's configure the link-protection, and node-link-protection in the LSPs designed. 
+Now, let's configure them:
 ```
 set protocols mpls label-switched-path R1-R8-A link-protection
 
 set protocols mpls label-switched-path R3-R8-A node-link-protection
 ```
-The configuration is very simple, right? It's simple but is so good in same way. 
+The configuration is simple, but very powerful!
 
-Now, let's check a LSP with link-protection:
+Checking an LSP with link-protection:
 ```
 root@R1> show rsvp session name R1-R8-A extensive 
 Ingress RSVP: 7 sessions
@@ -367,9 +365,9 @@ Ingress RSVP: 7 sessions
       2 Mar  6 15:14:24 CSPF: computation result accepted
       1 Mar  6 15:14:22 Originate Call
 ```
-We can see that this LSP is using the Bypass->10.200.0.1 LSP! In other words, the R1 is considering the link to R2 as PLR, and to protect this LSPs, in fail case this LSP will be encapsulated in this Bypass LSP. We can see the path of the Bypass->10.200.0.1 in the output too. 
+R1 is protecting the link to R2 by encapsulating the traffic in the Bypass->10.200.0.1 LSP.
 
-Now, let's check a LSP with the node-link-protection. 
+Now, checking node-link-protection:
 ```
 root@R3> show rsvp session name R3-R8-A extensive    
 Ingress RSVP: 6 sessions
@@ -453,10 +451,10 @@ Ingress RSVP: 6 sessions
   PathTear               0           0
   ResvTear               0           0
 ```
-Here, we can see the difference in practice, the PLR considered is the next node in the path. In simple words, the Bypass LSP is established to R1, to bypass the R2 that is considered the PLR. 
+Here is the difference in practice: the PLR is the next node. The Bypass LSP is established to R1, bypassing R2 entirely.
 
-Now, we have finished the RSVP configuration!!!
+And that’s it! We have finished the RSVP configuration.
 
-See you in the next chapter to explore the SR-MPLS, before it, we can follow to the MPLS VPNs!!!
+See you in the next chapter where we explore SR-MPLS, and after that, we move on to MPLS VPNs!
 
 
