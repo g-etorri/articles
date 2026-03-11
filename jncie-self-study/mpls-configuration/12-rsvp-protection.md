@@ -277,10 +277,186 @@ You know the difference of link-protection and node-link-protection?
 Basically, the link-protection makes a bypass LSPs considering the backbone link as the point of local repair, or PLR. In other words, will be created a Bypass LSP to the next hop avoiding the actual link of the LSP. And the node-link-protection calculate the bypass LSP considering the next node as PLR, so, the LSP will be computated to the next-next-hop.  
 
 Link-protection:
+
 <img width="472" height="242" alt="image" src="https://github.com/user-attachments/assets/641f4ecd-9122-49ff-94c5-c92197648956" />
 
 Node-link-protection:
+
 <img width="489" height="248" alt="image" src="https://github.com/user-attachments/assets/9b85b185-e1f7-46be-b514-70c1810bdbe9" />
 
 I draw the Bypass LSP as a pipe, because in this cases we have a label stack. So, the main LSP is encapsulated in another MPLS header, the stack is |Bypass LSP Label|Protected LSP Label, if we have a VPN, the VPN label will be the bottom label, or the flow label. Normally, if we have some LSPs with the same PLR, all of theses LSPs are encapsulated in a Bypass LSP. 
+
+Now, let's configure the link-protection, and node-link-protection in the LSPs designed. 
+```
+set protocols mpls label-switched-path R1-R8-A link-protection
+
+set protocols mpls label-switched-path R3-R8-A node-link-protection
+```
+The configuration is very simple, right? It's simple but is so good in same way. 
+
+Now, let's check a LSP with link-protection:
+```
+root@R1> show rsvp session name R1-R8-A extensive 
+Ingress RSVP: 7 sessions
+
+10.0.0.8
+  From: 10.0.0.1, LSPstate: Up, ActiveRoute: 0
+  LSPname: R1-R8-A, LSPpath: Primary
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 51
+  Resv style: 1 SE, Label in: -, Label out: 51
+  Time left:    -, Since: Fri Mar  6 15:14:34 2026
+  Tspec: rate 30Mbps size 30Mbps peak Infbps m 20 M 1500
+  Port number: sender 1 receiver 8460 protocol 0
+  Link protection desired
+  Soft preemption desired
+  Type: Link protected LSP, using Bypass->10.200.0.1
+      1 Mar  6 15:14:36 Link protection up, using Bypass->10.200.0.1
+  Enhanced FRR: Enabled (Downstream), LP-MP is 10.0.0.2
+  PATH rcvfrom: localclient 
+  Adspec: sent MTU 1500
+  Path MTU: received 1500
+  PATH sentto: 10.200.0.1 (ae0.0) 3 pkts
+       outgoing message state: refreshing, Message ID: 157, Epoch: 5534618
+  RESV rcvfrom: 10.200.0.1 (ae0.0) 6 pkts, Entropy label: Yes
+       incoming message handle: R-46/6, Message ID: 184, Epoch: 5534611
+  Explct route: 10.200.0.1 10.200.0.9 10.200.0.23 
+  Record route: <self> 10.0.0.2 (node-id) 10.200.0.1 10.0.0.7 (node-id)
+  10.200.0.9 10.0.0.8 (node-id) 10.200.0.23  
+      6 Mar 10 15:38:20 Record Route:  10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+      5 Mar 10 15:38:19 Record Route:  10.0.0.2(flag=0x20) 10.200.0.1(Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+      4 Mar  6 15:14:38 Record Route:  10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+      3 Mar  6 15:14:36 Record Route:  10.0.0.2(flag=0x20) 10.200.0.1(Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+      2 Mar  6 15:14:35 Up 
+      1 Mar  6 15:14:35 Record Route:  10.0.0.2(flag=0x20) 10.200.0.1(Label=51) 10.0.0.7(flag=0x20) 10.200.0.9(Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
+  PacketType          Sent    Received
+  Path                   3           0
+  Resv                   0           6
+  PathErr                0           0  
+  ResvErr                0           0
+  PathTear               0           0
+  ResvTear               0           0
+
+root@R1> show rsvp session name Bypass->10.200.0.1 detail 
+Ingress RSVP: 7 sessions
+
+10.0.0.2
+  From: 10.0.0.1, LSPstate: Up, ActiveRoute: 0
+  LSPname: Bypass->10.200.0.1
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 33
+  Resv style: 1 SE, Label in: -, Label out: 33
+  Time left:    -, Since: Fri Mar  6 15:14:24 2026
+  Tspec: rate 0bps size 0bps peak Infbps m 20 M 1500
+  Port number: sender 1 receiver 17277 protocol 0
+  Type: Bypass LSP
+    Number of data route tunnel through: 4
+    Number of RSVP session tunnel through: 0
+    Number of protected LSP instances: 3
+  PATH rcvfrom: localclient 
+  Adspec: sent MTU 1500
+  Path MTU: received 1500
+  PATH sentto: 10.200.0.5 (ge-0/0/3.0) 1 pkts
+  RESV rcvfrom: 10.200.0.5 (ge-0/0/3.0) 1 pkts, Entropy label: Yes
+  Explct route: 10.200.0.5 10.200.0.22 10.200.0.8 
+  Record route: <self> 10.200.0.5 10.200.0.22 10.200.0.8  
+      4 Mar  6 15:14:24 Up              
+      3 Mar  6 15:14:24 Record Route:  10.200.0.5(Label=33) 10.200.0.22(Label=34) 10.200.0.8(Label=3)
+      2 Mar  6 15:14:24 CSPF: computation result accepted
+      1 Mar  6 15:14:22 Originate Call
+```
+We can see that this LSP is using the Bypass->10.200.0.1 LSP! In other words, the R1 is considering the link to R2 as PLR, and to protect this LSPs, in fail case this LSP will be encapsulated in this Bypass LSP. We can see the path of the Bypass->10.200.0.1 in the output too. 
+
+Now, let's check a LSP with the node-link-protection. 
+```
+root@R3> show rsvp session name R3-R8-A extensive    
+Ingress RSVP: 6 sessions
+
+10.0.0.8
+  From: 10.0.0.3, LSPstate: Up, ActiveRoute: 0
+  LSPname: R3-R8-A, LSPpath: Primary
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 76
+  Resv style: 1 SE, Label in: -, Label out: 76
+  Time left:    -, Since: Wed Mar 11 18:28:29 2026
+  Tspec: rate 60Mbps size 60Mbps peak Infbps m 20 M 1500
+  Port number: sender 2 receiver 43667 protocol 0
+  Node/Link protection desired
+  Type: Node/Link protected LSP, using Bypass->10.200.0.6->10.200.0.0
+      3 Mar 11 18:28:33 Node protection up, using Bypass->10.200.0.6->10.200.0.0
+      2 Mar 11 18:28:32 New bypass Bypass->10.200.0.6
+      1 Mar 11 18:28:31 New bypass Bypass->10.200.0.6->10.200.0.0
+  Enhanced FRR: Enabled (Downstream), NP-MP is 10.0.0.1
+  PATH rcvfrom: localclient 
+  Adspec: sent MTU 1500
+  Path MTU: received 1500
+  PATH sentto: 10.200.0.6 (ge-0/0/3.0) 2 pkts
+       outgoing message state: refreshing, Message ID: 340, Epoch: 5534713
+  RESV rcvfrom: 10.200.0.6 (ge-0/0/3.0) 4 pkts, Entropy label: Yes
+       incoming message handle: R-128/4, Message ID: 329, Epoch: 5534611
+  Explct route: 10.200.0.6 10.200.0.0 10.200.0.5 
+  Record route: <self> 10.0.0.2 (node-id) 10.200.0.6 10.0.0.1 (node-id)
+  10.200.0.0 10.0.0.8 (node-id) 10.200.0.5  
+      4 Mar 11 18:28:32 Record Route:  10.0.0.2(flag=0x29) 10.200.0.6(flag=9 Label=76) 10.0.0.1(flag=0x21) 10.200.0.0(flag=1 Label=85) 10.0.0.8(flag=0x20) 10.200.0.5(Label=3)
+      3 Mar 11 18:28:31 Record Route:  10.0.0.2(flag=0x21) 10.200.0.6(flag=1 Label=76) 10.0.0.1(flag=0x21) 10.200.0.0(flag=1 Label=85) 10.0.0.8(flag=0x20) 10.200.0.5(Label=3)
+      2 Mar 11 18:28:29 Up 
+      1 Mar 11 18:28:29 Record Route:  10.0.0.2(flag=0x20) 10.200.0.6(Label=76) 10.0.0.1(flag=0x20) 10.200.0.0(Label=85) 10.0.0.8(flag=0x20) 10.200.0.5(Label=3)
+  PacketType          Sent    Received
+  Path                   2           0
+  Resv                   0           4
+  PathErr                0           0
+  ResvErr                0           0
+  PathTear               0           0
+  ResvTear               0           0
+
+root@R3> show rsvp session name Bypass->10.200.0.6->10.200.0.0 extensive 
+Ingress RSVP: 6 sessions
+
+10.0.0.1
+  From: 10.0.0.3, LSPstate: Up, ActiveRoute: 0
+  LSPname: Bypass->10.200.0.6->10.200.0.0
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 89
+  Resv style: 1 SE, Label in: -, Label out: 89
+  Time left:    -, Since: Wed Mar 11 18:28:33 2026
+  Tspec: rate 0bps size 0bps peak Infbps m 20 M 1500
+  Port number: sender 1 receiver 20300 protocol 0
+  Type: Bypass LSP
+    Number of data route tunnel through: 2
+    Number of RSVP session tunnel through: 0
+    Number of protected LSP instances: 1
+  Enhanced FRR: Enabled (Downstream)
+  PATH rcvfrom: localclient 
+  Adspec: sent MTU 1500
+  Path MTU: received 1500
+  PATH sentto: 10.200.0.11 (ge-0/0/4.0) 1 pkts
+       outgoing message state: refreshing, Message ID: 338, Epoch: 5534713
+  RESV rcvfrom: 10.200.0.11 (ge-0/0/4.0) 1 pkts, Entropy label: Yes
+       incoming message handle: R-129/1, Message ID: 377, Epoch: 5534632
+  Explct route: 10.200.0.11 10.200.0.2 
+  Record route: <self> 10.200.0.11 10.200.0.2  
+      4 Mar 11 18:28:33 Up
+      3 Mar 11 18:28:33 Record Route:  10.200.0.11(Label=89) 10.200.0.2(Label=3)
+      2 Mar 11 18:28:33 CSPF: computation result accepted
+      1 Mar 11 18:28:31 Originate Call
+      2 Mar 11 18:28:33 Up 
+      1 Mar 11 18:28:33 Record Route:  10.200.0.11(Label=89) 10.200.0.2(Label=3)
+  PacketType          Sent    Received
+  Path                   1           0
+  Resv                   0           1
+  PathErr                0           0
+  ResvErr                0           0
+  PathTear               0           0
+  ResvTear               0           0
+```
+Here, we can see the difference in practice, the PLR considered is the next node in the path. In simple words, the Bypass LSP is established to R1, to bypass the R2 that is considered the PLR. 
+
+Now, we have finished the RSVP configuration!!!
+
+See you in the next chapter to explore the SR-MPLS, before it, we can follow to the MPLS VPNs!!!
+
 
