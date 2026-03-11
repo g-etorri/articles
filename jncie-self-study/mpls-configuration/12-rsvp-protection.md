@@ -269,4 +269,18 @@ Ingress RSVP: 7 sessions
     10.200.0.17  
     Label in: 81, Label out: 62
 ```
-We can see the fast-reroute desired, and the detours because it. 
+We can see the fast-reroute desired, and the detours because that. 
+
+Now, let's follow to the link-protection LSPs. 
+You know the difference of link-protection and node-link-protection? 
+
+Basically, the link-protection makes a bypass LSPs considering the backbone link as the point of local repair, or PLR. In other words, will be created a Bypass LSP to the next hop avoiding the actual link of the LSP. And the node-link-protection calculate the bypass LSP considering the next node as PLR, so, the LSP will be computated to the next-next-hop.  
+
+Link-protection:
+<img width="472" height="242" alt="image" src="https://github.com/user-attachments/assets/641f4ecd-9122-49ff-94c5-c92197648956" />
+
+Node-link-protection:
+<img width="489" height="248" alt="image" src="https://github.com/user-attachments/assets/9b85b185-e1f7-46be-b514-70c1810bdbe9" />
+
+I draw the Bypass LSP as a pipe, because in this cases we have a label stack. So, the main LSP is encapsulated in another MPLS header, the stack is |Bypass LSP Label|Protected LSP Label, if we have a VPN, the VPN label will be the bottom label, or the flow label. Normally, if we have some LSPs with the same PLR, all of theses LSPs are encapsulated in a Bypass LSP. 
+
