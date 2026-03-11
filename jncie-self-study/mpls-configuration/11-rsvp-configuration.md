@@ -5,12 +5,11 @@ Hello guys! Today we'll connect our LDP islands using RSVP and prepare some Traf
 You already know the topology:
 <img width="1026" height="793" alt="image" src="https://github.com/user-attachments/assets/e0e9790b-3451-461a-8ef7-fa01e680a242" />
 
-Note that we have colored links, these represent our admin-groups!
+Note the colored links—these represent our admin-groups. Real-world traffic engineering is driven by constraints, so we’ll simulate those today to keep the lab realistic.
 
-Real-world traffic engineering often comes with many constraints, so we’ll simulate those today to keep things realistic.
-First, we need to enable RSVP on our backbone interfaces. For this task, we must meet the following parameters:
+First, we enable RSVP on our backbone interfaces. We must meet the following parameters:
 * Configure MD5 authentication on all backbone interfaces.
-* Set a bandwidth of 333 Mbps on all interfaces, except for LAG (Aggregate Ethernet) interfaces.
+* Set a bandwidth of 333 Mbps on all interfaces, except for LAG interfaces.
 
 It’s a simple setup. Here is the configuration for R1; you can apply similar logic to the other routers:
 ```
