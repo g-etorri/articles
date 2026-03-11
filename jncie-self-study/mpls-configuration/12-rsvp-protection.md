@@ -118,3 +118,155 @@ set protocols mpls label-switched-path R1-R6-A adaptive
 ```
 Here I'am setting this configuration on R1, we can replicate this in all our network. 
 
+Simulating a scenario to validate this knob, I isolated the R6 disabling the interfaces to R3 and R7. In the interface ae0.0 will arrive two LSPs, R3-R6-A with the priority 6 and the LSP R1-R6-A that we applied the adaptive knob. 
+```
+root@R6> show rsvp session name R1-* 
+Ingress RSVP: 4 sessions
+Total 0 displayed, Up 0, Down 0
+
+Egress RSVP: 4 sessions
+To              From            State   Rt Style Labelin Labelout LSPname 
+10.0.0.6        10.0.0.1        Up       0  1 SE       3        - R1-R6-A
+10.0.0.6        10.0.0.1        Up       0  1 SE       3        - R1-R6-A
+Total 2 displayed, Up 2, Down 0
+
+root@R6> show rsvp interface ae0.0 detail 
+ae0.0 Index 325, State Ena/Up
+  Authentication, Aggregate, Reliable, LinkProtection
+  HelloInterval 9(second)
+  Address 10.200.0.17
+  ActiveResv 3, PreemptionCnt 0, MaxResvTh 0bps, 0% 
+  Update threshold 10.000%, UpdateThresholdValue 200Mbps
+  Subscription 100%, StaticBW 2Gbps, AvailableBW 1.88Gbps, Actual 100%
+  ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 60Mbps[7] 60Mbps
+...
+```
+We can see that we have two RSVP sessions, a session for each path, and in the interface we have only 60Mbps reserved. So, we have success in this task!!!
+
+Now, let's make a dumb decision hahah, but we need to learn some cases, sure. 
+"Configure the LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A to not come back to the primary path if fails."
+
+Logically, the secondary path is worse than the primary, sometimes the secondary path is not the second best path, this happens because the mechanism of path computation evaluate the primary path of the LSP and focus in compute a path total different of the primary. So, If we have two physical link between two routers, not a LAG, but two physical links trough different streets. The second fiber of this path would be the second path of the CSPF, the secondary path will be computated avoiding this routers, to prevent node fail. But, if the primary fiber torns down, the LSP will converge to the secondary path, then the primary path will be computed by the secondary fiber. And this is the best path, better than the secondary path by the way, if we have the revert-timer defined, by default is defined to 60 seconds, the traffic will be converged to the primary path again, that is trough the secondary fiber, if we don't have the revert-timer, the LSP will forward the traffic trough the secondary path until the secondary path fails, then, the primary path will be active again. 
+
+You got it, right? I made an effort to explain this, talk to me, please!!
+
+Now, let's make this dumb configuration, no way...
+```
+set protocols mpls label-switched-path R2-R7-A revert-timer 0
+```
+We can see the revert-timer defined in the output, see below: 
+```
+root@R2> show mpls lsp name R2-R7-A detail 
+Ingress LSP: 2 sessions
+
+10.0.0.7
+  From: 10.0.0.2, State: Up, ActiveRoute: 0, LSPname: R2-R7-A, LSPid: 2
+  ActivePath: secondary (secondary)
+  Link protection desired
+  LSPtype: Static Configured, Penultimate hop popping
+  LoadBalance: Random
+  Follow destination IGP metric
+  Encoding type: Packet, Switching type: Packet, GPID: IPv4
+  Revert timer: 0 #<--------- HERE HERE HERE HERE
+  LSP Self-ping Status : Enabled
+  Primary   primary          State: Up
+    Priorities: 6 6
+    Bandwidth: 60Mbps
+    SmartOptimizeTimer: 180
+          Include Any: orange
+    Flap Count: 2
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.0 S 10.200.0.5 S 10.200.0.22 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.0.0.1(flag=0x21) 10.200.0.0(flag=1 Label=65) 10.0.0.8(flag=0x21) 10.200.0.5(flag=1 Label=54) 10.0.0.7(flag=0x20) 10.200.0.22(Label=0)
+ *Secondary secondary        State: Up
+    Priorities: 6 6
+    Bandwidth: 60Mbps
+    SmartOptimizeTimer: 180
+          Include Any: orange
+    Flap Count: 2
+    MBB Count: 0
+    Computed ERO (S [L] denotes strict [loose] hops): (CSPF metric: 25)
+ 10.200.0.0 S 10.200.0.5 S 10.200.0.22 S 
+    Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
+          10.0.0.1(flag=0x21) 10.200.0.0(flag=1 Label=61) 10.0.0.8(flag=0x21) 10.200.0.5(flag=1 Label=50) 10.0.0.7(flag=0x20) 10.200.0.22(Label=0)
+```
+With the revert-timer defined in 0, we'll never have a reversion of the path. So, if you prefer this situation, ok, I'll respect you, but I don't agree with this. 
+
+Now, let's make a checkpoint of our tasks, we reached the half of them. 
+* ~~Configure a backup path in all LSP except in R8-R3-B, R3-R8-B, R7-R4-B and R4-R7-B.~~
+* ~~Make sure that LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A have a backup path established in advance, before the primary fails.~~
+* ~~Configure all LSPs to not double the bandwidth with the secondary path.~~
+* ~~Configure the LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A to not come back to the primary path if fails.~~
+* Configure the LSPs R1-R6-A, R6-R1-A, R2-R5-A and R5-R2-A to use fast-reroute, without use bandwidth or admin-group of the primary path. The devour path do not must have more than 5 hops.
+* Configure the LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R3-R6-A, R6-R3-A, R4-R5-A and R5-R4-A to use link-protection mechanism.
+* Configure the LSPs R8-R3-A, R3-R8-A, R7-R4-A and R4-R7-A to use the node-link-protection mechanism.
+
+Ok, we make more than half of the tasks. 
+
+Let's come back to our goal. 
+First, to achieve all of our goals, we need to include the link-protection in the RSVP interfaces. We can do this in two ways, specifying the link-protection in each interface, or making a group and applying in the RSVP. I prefer the last one. See below:
+```
+set protocols rsvp interface ae0.0 link-protection
+set protocols rsvp interface ge-0/0/2.0 link-protection
+set protocols rsvp interface ge-0/0/3.0 link-protection
+///
+set groups rsvp protocols rsvp interface <*> link-protection
+set protocols rsvp apply-groups rsvp
+```
+
+Ok, with this, we can configure the final three tasks. 
+To make our LSPs to have fast-reroute with 5 hops and not inherits the bandwidth and admin-groups of the LSPs we can use the follow configuration: 
+```
+set protocols mpls label-switched-path R1-R6-A fast-reroute hop-limit 5
+set protocols mpls label-switched-path R1-R6-A fast-reroute no-include-any
+```
+Note: By default, Junos uses a limit of 6 hops to fast-reroute. The no-include-any makes the fast-reroute not consider the bandwitdh and admin-groups requirements. 
+
+Now, let's check the outputs:
+```
+root@R1> show rsvp session name R1-R6-A detail 
+Ingress RSVP: 7 sessions
+
+10.0.0.6
+  From: 10.0.0.1, LSPstate: Up, ActiveRoute: 0
+  LSPname: R1-R6-A, LSPpath: Primary
+  LSPtype: Static Configured
+  Suggested label received: -, Suggested label sent: -
+  Recovery label received: -, Recovery label sent: 79
+  Resv style: 1 SE, Label in: -, Label out: 79
+  Time left:    -, Since: Wed Mar 11 17:32:03 2026
+  Tspec: rate 60Mbps size 60Mbps peak Infbps m 20 M 1500
+  Port number: sender 5 receiver 47469 protocol 0
+  FastReroute desired
+  PATH rcvfrom: localclient 
+  Adspec: sent MTU 1500
+  Path MTU: received 1500
+  PATH sentto: 10.200.0.3 (ge-0/0/2.0) 5 pkts
+  RESV rcvfrom: 10.200.0.3 (ge-0/0/2.0) 8 pkts, Entropy label: Yes
+  Explct route: 10.200.0.3 10.200.0.15 10.200.0.17 
+  Record route: <self> 10.200.0.3 10.200.0.15 10.200.0.17  
+    Detour is Up
+    Detour Tspec: rate 0bps size 0bps peak Infbps m 20 M 1500
+    Detour adspec: sent MTU 1500
+    Path MTU: received 1500             
+    Detour PATH sentto: 10.200.0.5 (ge-0/0/3.0) 4 pkts
+    Detour RESV rcvfrom: 10.200.0.5 (ge-0/0/3.0) 5 pkts, Entropy label: Yes
+    Detour Explct route: 10.200.0.5 10.200.0.18 10.200.0.17 
+    Detour Record route: <self> 10.200.0.5 10.200.0.18 10.200.0.17  
+    Detour Label out: 62
+  Detour branch from 10.200.0.3, to skip 10.0.0.5, Up
+    Tspec: rate 0bps size 0bps peak Infbps m 20 M 1500
+    Adspec: received MTU 1500 
+    Path MTU: received 0
+    PATH rcvfrom: 10.200.0.3 (ge-0/0/2.0) 4 pkts
+    Adspec: received MTU 1500 sent MTU 1500
+    PATH sentto: 10.200.0.5 (ge-0/0/3.0) 1 pkts
+    RESV rcvfrom: 10.200.0.5 (ge-0/0/3.0) 5 pkts, Entropy label: Yes
+    Explct route: 10.200.0.5 10.200.0.18 10.200.0.17 
+    Record route: 10.200.0.2 10.200.0.3 <self> 10.200.0.5 10.200.0.18
+    10.200.0.17  
+    Label in: 81, Label out: 62
+```
+We can see the fast-reroute desired, and the detours because it. 
