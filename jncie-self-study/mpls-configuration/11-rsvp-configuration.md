@@ -1,18 +1,18 @@
 # RSVP Configuration
 
-Hello guys, today we'll connect our LDP islands using RSVP. And we'll make some TE preparations on our LAB!!! Let's go. 
+Hello guys! Today we'll connect our LDP islands using RSVP and prepare some Traffic Engineering tweaks in our lab. Let’s dive in!
 
 You already know the topology:
 <img width="1026" height="793" alt="image" src="https://github.com/user-attachments/assets/e0e9790b-3451-461a-8ef7-fa01e680a242" />
 
-Note that we have the links colored, this is our admin-groups! 
+Note that we have colored links, these represent our admin-groups!
 
-Today, we have so much constraints! Because, making traffic engineering IRL we'll see some constraints, and we need to learn this to do IRL. 
-First, we need to configure our backbone interfaces with RSVP. In this task, we need to accomplish the follow parameters:
-* Configure the MD5 authentication in all backbone interfaces. 
-* Configure the bandwidth of 333 Mbps in all interface, execpt the LAG interfaces.
+Real-world traffic engineering often comes with many constraints, so we’ll simulate those today to keep things realistic.
+First, we need to enable RSVP on our backbone interfaces. For this task, we must meet the following parameters:
+* Configure MD5 authentication on all backbone interfaces.
+* Set a bandwidth of 333 Mbps on all interfaces, except for LAG (Aggregate Ethernet) interfaces.
 
-This is simple, here we have the configuration in R1, and you can apply the configuration similarly in the other routers: 
+It’s a simple setup. Here is the configuration for R1; you can apply similar logic to the other routers:
 ```
 set protocols rsvp interface ae0.0 authentication-key l4b
 set protocols rsvp interface ge-0/0/2.0 authentication-key l4b
@@ -20,14 +20,14 @@ set protocols rsvp interface ge-0/0/2.0 bandwidth 333m
 set protocols rsvp interface ge-0/0/3.0 authentication-key l4b
 set protocols rsvp interface ge-0/0/3.0 bandwidth 333m
 ```
-We can see that hello are exchangeds between R1 and R2:
+We can verify that hellos are being exchanged between R1 and R2:
 ```
 root@R1> show rsvp interface ae0.0 detail | match Hello 
   HelloInterval 9(second)
   Hello                4             2           2             1
 ```
 
-Ok, with the RSVP configured in all interfaces, let's color the interfaces, using admin-groups! We'll do it following the table below:
+Now that RSVP is running on all interfaces, let’s "color" them using admin-groups! We’ll follow this mapping:
 | Router | Interface  | Admin Group  |
 | ------ | ---------- | ------------ |
 | R1| ge-0/0/2.0 | blue         |
@@ -55,7 +55,7 @@ Ok, with the RSVP configured in all interfaces, let's color the interfaces, usin
 | R8| ge-0/0/3.0 | orange       |
 | R8| ge-0/0/4.0 | blue.orange  |
 
-Again, I'll do this in R1 and apply similarly in the other routers of our network:
+Again, here is the config for R1:
 ```
 set protocols mpls admin-groups orange 0
 set protocols mpls admin-groups blue 1
@@ -65,7 +65,7 @@ set protocols mpls interface ge-0/0/3.0 admin-group orange
 set protocols mpls interface ge-0/0/2.0 admin-group blue
 ```
 
-Now, with our underlay configured, we can configure our LSPs. Here we have a list of all LSPs that we need to configure in our network:
+With the underlay ready, let's configure our LSPs. Here is our target list:
 | Ingress | Egress | LSP Name |
 | ------- | ------ | -------- |
 | R1      | R8     | R1-R8-A  |
@@ -89,8 +89,8 @@ Now, with our underlay configured, we can configure our LSPs. Here we have a lis
 | R8      | R3     | R8-R3-A  |
 | R8      | R3     | R8-R3-B  |
 
-First, let's make the standard configuration of the LSPs in our network. All the LSPs will have BFD working, and priority and hold with the worse value. 
-To BFD working accordingly, we need to add a term in our RE filter, and modify another. 
+For the standard configuration, all LSPs will have BFD enabled, and we'll set the priority and hold values to the lowest priority (7 7).
+To get BFD working correctly, we need to adjust our RE filter:
 ```
 set firewall family inet filter filter-re term ALLOW-BFD from port 4784
 set firewall family inet filter filter-re term ALLOW-LSP-PING from protocol udp
@@ -99,7 +99,7 @@ set firewall family inet filter filter-re term ALLOW-LSP-PING then accept
 edit firewall family inet filter filter-re
 insert term ALLOW-LSP-PING before term DROP-AND-COUNT
 ```
-We need to add the control port for BFD, before this we was using only the echo port. The BFD depends of the LSP ping also, so, we need to permit this in the RE filter. 
+We added the BFD control port and permitted LSP ping, which BFD depends on. 
 ```
 set protocols mpls label-switched-path R1-R8-A to 10.0.0.8
 set protocols mpls label-switched-path R1-R8-A priority 7 7
@@ -108,7 +108,7 @@ set protocols mpls label-switched-path R1-R6-A to 10.0.0.6
 set protocols mpls label-switched-path R1-R6-A priority 7 7
 set protocols mpls label-switched-path R1-R6-A oam bfd-liveness-detection minimum-interval 3000
 ```
-Note, by default the hold value on Junos will be 0, with this, even if we have a LSP with a best priority value, the preemption will not occur because the hold value is 0. We need to guarantee that our hold value is the worse, that's why the hold value need to be changed. 
+Note: By default, the hold value in Junos is 0. This means even if a new LSP has a better priority, preemption won't happen unless we explicitly define these values.
 
 With this, we'll have the LSPs and BFD sessions established! 
 ```
@@ -126,24 +126,24 @@ Address                  State     Interface      Time     Interval  Multiplier
 10.0.0.8                 Up                       9.000     3.000        3  
 ```
 
-Ok, with the LSPs established, we need to learn some tasks of traffic engineering. So, let's simulate some situations to take the actions.
-* Become the network invisible for the external traceroutes
-* Configure LSPs to be established trough specific color in backbone
-* Configure explicit-paths to establish the LSPs trough specific path
-* Signal specific bandwidth in some LSPs
-* Configure auto-bandiwitdh in some LSPs
-* Change the priority and hold value to make some LSPs priority in the backbone
-* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
-* Configure an automatic otimization of the LSPs
-* Install different FECs in the FIB using LSPs RSVP
-* Connect the LDP islands with ldp-tunneling in the LSPs
-* Make traffic policies using LSPs to select the path for specific destinations
+Now that our LSPs are up and running, it's time to dive into some Traffic Engineering (TE) tasks. Let’s simulate a few real-world scenarios to see how we can take control of our traffic:
+* Make the network invisible to external traceroutes.
+* Force LSPs through specific colors in the backbone.
+* Configure explicit paths to pin LSPs to a specific route.
+* Signal specific bandwidth requirements for certain LSPs.
+* Enable auto-bandwidth to let LSPs adjust dynamically.
+* Tweak priority and hold values to give certain LSPs "VIP" status in the backbone.
+* Set up soft-preemption so LSPs are re-routed before being kicked off a link.
+* Configure automatic optimization for periodic path re-calculation.
+* Install specific FECs into the FIB using RSVP LSPs.
+* Connect LDP islands using LDP tunneling over RSVP.
+* Create traffic policies to select specific LSPs based on the destination.
 
-Ok, let's start becoming our network invisible to the external traceroutes. To do this, we need to not propagate the TTL in the P routers, in the traceroute we'll se only the ingress and egress routers. 
+Ok, let's start by making our network invisible to external traceroutes. To do this, we need to stop TTL propagation on the P routers; this way, a traceroute will only show the ingress and egress routers.
 ```
 set protocols mpls no-propagate-ttl
 ```
-This is simple, if you remember, in the BGP chapter I make the configurations after do the MPLS configuration, so, here I will show you the result of the no-propagate-ttl. And a result of a traceroute inside our network.  
+It’s that simple! If you remember the BGP chapter, I usually apply these configs after setting up MPLS. Let's see the result of no-propagate-ttl and compare it with a traceroute inside our network.  
 ```
 root@IX-1> traceroute 201.5.1.3 
 traceroute to 201.5.1.3 (201.5.1.3), 30 hops max, 40 byte packets
@@ -156,22 +156,22 @@ traceroute to 10.0.0.5 (10.0.0.5), 30 hops max, 52 byte packets
  1  r4.ge0-0-2.0.jncie.lab (10.200.0.3)  6.381 ms  17.889 ms  13.717 ms
  2  r5.jncie.lab (10.0.0.5)  21.333 ms  123.781 ms  61.681 ms
 ```
-Basically, the traceroute show our ingress router R1, and the egress router R5, and finally, the CE5-3. In the traceroute that I made on R1, we can see that we have de R4 as a P router. 
+Basically, the traceroute shows our ingress router (R1), the egress router (R5), and finally, the CE5-3. In the traceroute I ran from R1, we can see that R4 appears as a P router.
 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes~~
-* Configure LSPs to be established trough specific color in backbone
-* Configure explicit-paths to establish the LSPs trough specific path
-* Signal specific bandwidth in some LSPs
-* Configure auto-bandiwitdh in some LSPs
-* Change the priority and hold value to make some LSPs priority in the backbone
-* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
-* Configure an automatic otimization of the LSPs
-* Install different FECs in the FIB using LSPs RSVP
-* Connect the LDP islands with ldp-tunneling in the LSPs
-* Make traffic policies using LSPs to select the path for specific destinations
+Updating our task list:
+* ~~Make the network invisible to external traceroutes.~~
+* Force LSPs through specific colors in the backbone.
+* Configure explicit paths to pin LSPs to a specific route.
+* Signal specific bandwidth requirements for certain LSPs.
+* Enable auto-bandwidth to let LSPs adjust dynamically.
+* Tweak priority and hold values to give certain LSPs "VIP" status in the backbone.
+* Set up soft-preemption so LSPs are re-routed before being kicked off a link.
+* Configure automatic optimization for periodic path re-calculation.
+* Install specific FECs into the FIB using RSVP LSPs.
+* Connect LDP islands using LDP tunneling over RSVP.
+* Create traffic policies to select specific LSPs based on the destination.
 
-Now, let's specify some LSPs to be established in specific colored paths. The LSPs R2-R7-A, R7-R2-A, R3-R6-A and R6-R3-A will be established trough orange links, and the LSPs R1-R8-A, R8-R1-A, R4-R5-A e R5-R4-A trough blue links. The configuration is very simple:
+Now, let's specify some LSPs to follow colored paths. LSPs R2-R7-A, R7-R2-A, R3-R6-A, and R6-R3-A will use the orange links, while R1-R8-A, R8-R1-A, R4-R5-A, and R5-R4-A will go through the blue ones. The configuration is straightforward:
 ```
 set protocols mpls label-switched-path R2-R7-A admin-group include-any orange
 set protocols mpls label-switched-path R3-R6-A admin-group include-any orange
@@ -184,7 +184,7 @@ set protocols mpls label-switched-path R4-R5-A admin-group include-any blue
 set protocols mpls label-switched-path R5-R4-A admin-group include-any blue
 ```
 
-Now, let's verify a specific LSP to check what is the path computed. 
+Let's verify the path computed for a specific LSP:
 ```
 root@R1> show mpls lsp name R1-R8-A extensive                        
 Ingress LSP: 2 sessions
@@ -208,26 +208,26 @@ Ingress LSP: 2 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.1(Label=157) 10.200.0.9(Label=71) 10.200.0.23(Label=3)
 ```
-In this output we can see that we have the admin-group defined, and the path computed trough blue links, we can check the topology image to check, the path is R1 -> R2 -> R7 -> R8. 
+In this output, we can see the admin-group is defined and the path was computed through the blue links. Checking the topology, the path is R1 -> R2 -> R7 -> R8.
 
-Ok, this task is finished too!!!
+Done! Another task finished.
 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes~~
-* ~~Configure LSPs to be established trough specific color in backbone~~
-* Configure explicit-paths to establish the LSPs trough specific path
-* Signal specific bandwidth in some LSPs
-* Configure auto-bandiwitdh in some LSPs
-* Change the priority and hold value to make some LSPs priority in the backbone
-* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
-* Configure an automatic otimization of the LSPs
-* Install different FECs in the FIB using LSPs RSVP
-* Connect the LDP islands with ldp-tunneling in the LSPs
-* Make traffic policies using LSPs to select the path for specific destinations
+Updating our task list:
+* ~~Make the network invisible to external traceroutes.~~
+* ~~Force LSPs through specific colors in the backbone.~~
+* Configure explicit paths to pin LSPs to a specific route.
+* Signal specific bandwidth requirements for certain LSPs.
+* Enable auto-bandwidth to let LSPs adjust dynamically.
+* Tweak priority and hold values to give certain LSPs "VIP" status in the backbone.
+* Set up soft-preemption so LSPs are re-routed before being kicked off a link.
+* Configure automatic optimization for periodic path re-calculation.
+* Install specific FECs into the FIB using RSVP LSPs.
+* Connect LDP islands using LDP tunneling over RSVP.
+* Create traffic policies to select specific LSPs based on the destination.
 
-Now, let's do some EPs. Here, we have a situation between R3 and R8, we need to guarantee that the two LSPs in each router uses two differents paths, we can't use admin-groups and each explicit-path must have only 3 hops. 
+Now, let’s work with some Explicit Paths. We have a situation between R3 and R8: we need to ensure that the two LSPs on each router use two different paths. We can't use admin-groups here, and each explicit path must have exactly 3 hops.
 
-With the situation defined, I'll create two paths, path north and south! 
+With that in mind, I'll create two paths: North and South!
 R3:
 ```
 set protocols mpls path r8-via-north 10.0.0.2
@@ -250,7 +250,7 @@ set protocols mpls path r3-via-south 10.0.0.3
 set protocols mpls label-switched-path R8-R3-A primary r3-via-north
 set protocols mpls label-switched-path R8-R3-B primary r3-via-south
 ```
-Ok, let's check the LSP now:
+Let's check the LSP status:
 ```
 root@R3> show mpls lsp name R3-R8-* detail 
 Ingress LSP: 3 sessions
@@ -291,9 +291,9 @@ Ingress LSP: 3 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.13(Label=75) 10.200.0.21(Label=74) 10.200.0.23(Label=3)
 ```
-In the output we can see the explicit-path designed, and the computed ERO accordingly we have expected. So, this is a sucess case! 
+We can see the designed explicit path and the computed ERO exactly as expected. Success!
 
-Now, to make the things more interesting, let's do a mix of explicit-path and admin-groups! Between R4 and R7 we have two pair of LSPs in each router, the LSP from R7 to R4 must use orange links, and the LSPs from R4 to R7 must use the blue links, but in this case, we need to ensure that the LSPs use different paths to egress routers. Let's go.
+To make things more interesting, let’s mix Explicit Paths and Admin-Groups. Between R4 and R7, we have two pairs of LSPs. The LSPs from R7 to R4 must use orange links, and the LSPs from R4 to R7 must use blue links. On top of that, we need to ensure they use different paths to the egress routers. Let’s go!
 R4:
 ```
 set protocols mpls path r7-ep1 10.0.0.3
@@ -312,7 +312,7 @@ set protocols mpls label-switched-path R7-R4-A primary r4-ep1
 set protocols mpls label-switched-path R7-R4-B admin-group include-any orange
 set protocols mpls label-switched-path R7-R4-B primary r4-ep2
 ```
-To ensure that LSPs uses different paths, we can use a explicit path with only one hop, so that we are changing the first hop of the LSP only, and so on the LSPs will be computed using the best IGP path from de first hop. 
+To ensure the LSPs take different routes, we can use an explicit path with only one hop. This changes just the first hop of the LSP, and from there, the router computes the best CSPF path.
 
 Let's check the results:
 ```
@@ -357,31 +357,29 @@ Ingress LSP: 3 sessions
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.2(Label=132) 10.200.0.1(Label=162) 10.200.0.9(Label=3)
 ```
-In the output we can see the different paths computed trough blue links! In the LSP R4-R7-A the path is R3 -> R6 -> R5-> R8 -> R7, and in the LSP R4-R7-B the path is R1 -> R2 -> R7. 
+Check it out—different paths computed through the blue links! For LSP R4-R7-A, the path is R3 -> R6 -> R5 -> R8 -> R7, while R4-R7-B goes via R1 -> R2 -> R7.
 
-Everything looks good so far. 
+Everything looks good so far!
 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes~~
-* ~~Configure LSPs to be established trough specific color in backbone~~
-* ~~Configure explicit-paths to establish the LSPs trough specific path~~
-* Signal specific bandwidth in some LSPs
-* Configure auto-bandiwitdh in some LSPs
-* Change the priority and hold value to make some LSPs priority in the backbone
-* Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
-* Configure an automatic otimization of the LSPs
-* Install different FECs in the FIB using LSPs RSVP
-* Connect the LDP islands with ldp-tunneling in the LSPs
-* Make traffic policies using LSPs to select the path for specific destinations
+Updating our task list:
+* ~~Make the network invisible to external traceroutes.~~
+* ~~Force LSPs through specific colors in the backbone.~~
+* ~~Configure explicit paths to pin LSPs to a specific route.~~
+* Signal specific bandwidth requirements for certain LSPs.
+* Enable auto-bandwidth to let LSPs adjust dynamically.
+* Tweak priority and hold values to give certain LSPs "VIP" status in the backbone.
+* Set up soft-preemption so LSPs are re-routed before being kicked off a link.
+* Configure automatic optimization for periodic path re-calculation.
+* Install specific FECs into the FIB using RSVP LSPs.
+* Connect LDP islands using LDP tunneling over RSVP.
+* Create traffic policies to select specific LSPs based on the destination.
 
-Now, let's configure the bandwitdth reserve in some LSPs, let's apply a reserve of 60Mbps on LSP R1-R8-A, R8-R1-A, R4-R5-A and R5-R4-A. 
-In the R1, let's add only one line, and we can repplicate similarly on the other routers. 
+Now, let’s configure bandwidth reservation. We'll reserve 60Mbps for LSPs R1-R8-A, R8-R1-A, R4-R5-A, and R5-R4-A.
+On R1, we just need to add one line and replicate it across the other routers:
 ```
 set protocols mpls label-switched-path R1-R6-A bandwidth 60m
 ```
 Let's check the outputs now. 
-
-In R1, we can see that our LSP is established. 
 ```
 10.0.0.6
   From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R6-A, LSPid: 4
@@ -402,7 +400,7 @@ In R1, we can see that our LSP is established.
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.1(Label=57) 10.200.0.9(Label=44) 10.200.0.20(Label=3)
 ```
-Here we can see that we have the bandwidth reserved in the path correctly, but how we can know this? If the LSP is established, the path have bandwitdh sufficient hahah. Let's view in the transit routers. 
+Looking at R1, we can see the LSP is established. How do we know the bandwidth is actually reserved? Well, if the LSP is up, it means there was enough bandwidth! But let’s double-check the transit routers:
 ```
 root@R2> show rsvp session name R1-R6-A detail 
 Transit RSVP: 13 sessions
@@ -437,16 +435,14 @@ ae0.0 Index 326, State Ena/Up
     MaxAvailableBW 2Gbps = (bc0*subscription)
     ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 0bps[7] 60Mbps       
 ```
-Here we can see that in the interface ae0.0 the R2 have 2Gbps of total bandwidth available and 60Mbps was reserved, by our LSP! 
+Here we see that on interface ae0.0, R2 has 2Gbps of total bandwidth, and 60Mbps has been successfully reserved by our LSP!
 
-Everything is ok! Now, we can go for the next task.
-
-Updating the tasks in our network: 
+Updating our task list:
 * ~~Become the network invisible for the external traceroutes~~
 * ~~Configure LSPs to be established trough specific color in backbone~~
 * ~~Configure explicit-paths to establish the LSPs trough specific path~~
 * ~~Signal specific bandwidth in some LSPs~~
-* Configure auto-bandwitdh in some LSPs
+* ~~Configure auto-bandwitdh in some LSPs~~
 * Change the priority and hold value to make some LSPs priority in the backbone
 * Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
 * Configure an automatic otimization of the LSPs
@@ -454,8 +450,8 @@ Updating the tasks in our network:
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
-Now, let's configure the auto-bandwitdh feature in some LSPs!!! We'll configure this on the LSPs R1-R8-A, R8-R1-A, R4-R5-A e R5-R4-A.
-Here I am configuring in the R1, and we can repplicate on the other routers. For this function, we need to create a file and configure the auto-bandwidth knob, with this, the router will collect the average bandwitdh of the LSPs with auto-bandwidth configured, and will can change the bandidth signaled accordingly the necessity. 
+Next task: Auto-bandwidth! We'll set this up for LSPs R1-R8-A, R8-R1-A, R4-R5-A, and R5-R4-A.
+I’m configuring this on R1 first. We need to enable statistics collection so the router can monitor the average usage and adjust the signaled bandwidth as needed.
 ```
 set protocols mpls statistics file auto-bw
 set protocols mpls statistics auto-bandwidth
@@ -463,7 +459,7 @@ set protocols mpls label-switched-path R1-R8-A auto-bandwidth adjust-interval 17
 set protocols mpls label-switched-path R1-R8-A auto-bandwidth minimum-bandwidth 30m
 set protocols mpls label-switched-path R1-R8-A auto-bandwidth maximum-bandwidth 120m
 ```
-In this configuration, we are saying to the router adjust the bandwith in each 48 hours, and the LSPs can have the minimum of 30Mbps signalled and the maximum of 120Mbps signalled. So, with time the bandwidth will vary between 30Mbps and 120Mbps accordingly the average bandwitdh collected by the router. 
+With this, we’re telling the router to adjust the bandwidth every 48 hours, staying between 30Mbps and 120Mbps.
 ```
 10.0.0.8
   From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R8-A, LSPid: 2
@@ -492,30 +488,29 @@ In this configuration, we are saying to the router adjust the bandwith in each 4
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
 ```
-In the output, we can see that we don't have any increase of the bandwitdh beyond the 30Mbps, so this LSPs is signalled with 30Mbps only, and the next adjust will be realized in 88756 seconds. 
+Upon output, we can see that there was no increase in bandwidth beyond 30 Mbps; therefore, this LSP is flagged with only 30 Mbps, and the next adjustment will be made in 88756 seconds.
 
-Ok, autobandwitdh configured also. We can go to the next task!!
+Ok, autobandwitdh is also configured. We can proceed to the next task!
 
-Updating the tasks in our network: 
+Updating our task list:
 * ~~Become the network invisible for the external traceroutes~~
 * ~~Configure LSPs to be established trough specific color in backbone~~
 * ~~Configure explicit-paths to establish the LSPs trough specific path~~
 * ~~Signal specific bandwidth in some LSPs~~
 * ~~Configure auto-bandwitdh in some LSPs~~
-* Change the priority and hold value to make some LSPs priority in the backbone
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
 * Configure an automatic otimization of the LSPs
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
-Do you rememeber that before start the tasks, we defined a standard model of LSP with the priority and hold value of 7? It's time to prefer some LSPs in our network!
-
-In the LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R8-R3-A, R3-R8-A, R3-R6-A, R6-R3-A, R4-R5-A e R5-R4-A we'll define the priority and hold value of 6. Again, I'll configure in R1 and you can repplicate on the other routers. 
+Remember how we set all LSPs to priority 7 at the start? Now it’s time to give some LSPs a "VIP" preference.
+For LSPs R1-R8-A, R8-R1-A, R2-R7-A, R7-R2-A, R8-R3-A, R3-R8-A, R3-R6-A, R6-R3-A, R4-R5-A e R5-R4-A, we'll change the priority and hold values to 6. 
 ```
 set protocols mpls label-switched-path R1-R8-A priority 6 6
 ```
-This way, if we have a issue with resources in a interface, the LSP with the minor value of priority will be preferred, and the hold value will define if the LSPs current estalblished will be preempted or not. If the value of hold is equal, the LSP established will be established until a recomputation, if the hold value of our LSP is less than the LSP established, a preemption will occur. 
+This way, if there’s a resource crunch, LSPs with lower priority values (better priority) get preference. Since the hold value is also 6, it can preempt LSPs with a hold value of 7.
 
 Let's see the priority and the reservation of this LSP in practice. 
 ```
@@ -546,7 +541,7 @@ Let's see the priority and the reservation of this LSP in practice.
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.0.0.2(flag=0x21) 10.200.0.1(flag=1 Label=51) 10.0.0.7(flag=0x21) 10.200.0.9(flag=1 Label=41) 10.0.0.8(flag=0x20) 10.200.0.23(Label=3)
 ```
-In the output we can see the priority and hold values, defined as 6. 
+In the output we can see the priority and hold values, set to 6. 
 
 Now, in R2 we can see the bandwitdh reservation
 ```
@@ -560,12 +555,11 @@ ae0.0 Index 326, State Ena/Up
   Subscription 100%, StaticBW 2Gbps, AvailableBW 1.91Gbps, Actual 100%
   ReservedBW [0] 0bps[1] 0bps[2] 0bps[3] 0bps[4] 0bps[5] 0bps[6] 30Mbps[7] 60Mbps
 ```
-Note that the reservation of the LSP occurs in another "queue", for the LSPs with priority 6, this behavior allows us to have flexiblity in TE!!! It's amazing. 
+Note that LSP reservation occurs in a different "queue," for LSPs with priority 6. This behavior allows us flexibility in TE! It's amazing.
 
 Ok, now we have LSPs with different priorities in our network, simulating different SLAs as a service. 
 
-Let's follow for the tasks. 
-Updating the tasks in our network: 
+Updating our task list: 
 * ~~Become the network invisible for the external traceroutes~~
 * ~~Configure LSPs to be established trough specific color in backbone~~
 * ~~Configure explicit-paths to establish the LSPs trough specific path~~
@@ -574,12 +568,11 @@ Updating the tasks in our network:
 * ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.
 * Configure an automatic otimization of the LSPs
-* Configure a secondary path for the LSPs, without double the reserved bandwidth. 
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
-Now, we have another mission, to make our network smoothly during the convergence. Thinkwith me now, if we have a resource issue in interface, where we have a LSP with a minor priority wanting to establish, and we have a LSP with the priority and hold value less than this LSP. The LSP currently established will be torned down. This could be a problem for our customers, that could have a traffic loss. To avoid this problem, we can add the soft-preemption knob in our LSPs, with this, the router that have the resource inssuficient can send a preemption pending message to the ingress router, then, the ingress router will compute the LSPs trough another path, without traffic loss. 
+Now, let's talk about Soft Preemption. Imagine a resource issue where a high-priority LSP wants to come up, but a low-priority one is already there. Normally, the low-priority one is just killed. To avoid traffic loss for our customers, soft-preemption tells the ingress router to find a new path before tearing down the old LSP.
 
 This configuration is very simple, and we'll apply this in all LSPs of our network. 
 ```
@@ -603,7 +596,7 @@ We can see in the output with the "Soft preemption desired".
 
 Everything is ok!!! Let's follow for the next tasks.
 
-Updating the tasks in our network: 
+Updating our task list:
 * ~~Become the network invisible for the external traceroutes~~
 * ~~Configure LSPs to be established trough specific color in backbone~~
 * ~~Configure explicit-paths to establish the LSPs trough specific path~~
@@ -612,18 +605,17 @@ Updating the tasks in our network:
 * ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
 * Configure an automatic otimization of the LSPs
-* Configure a secondary path for the LSPs, without double the reserved bandwidth. 
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
-Now, to optimize the LSPs periodically, we can include a simple configuration in the routers. 
+To keep things optimized, we can set a periodic timer: 
 ```
 set protocols mpls optimize-timer 28800
 ```
-This way, our routers will optimize every LSP each 8 hours. Optimization is basically a recomputation of the LSP, if we have a best path, the LSP will be computed by this path, if not, the LSP will continue established in the current path. 
+In this way, our routers will optimize each LSP every 8 hours. The optimization basically consists of recalculating the LSP; if there is a better path, the LSP will be calculated based on that path; otherwise, the LSP will remain the current path.
 
-Here we can see the output with de reoptimization configured. 
+Here we can see the output with the re-optimization configured.
 ```
 10.0.0.6
   From: 10.0.0.1, State: Up, ActiveRoute: 0, LSPname: R1-R6-A, LSPid: 5
@@ -647,11 +639,11 @@ Here we can see the output with de reoptimization configured.
     Received RRO (ProtectionFlag 1=Available 2=InUse 4=B/W 8=Node 10=SoftPreempt 20=Node-ID):
           10.200.0.1(flag=9 Label=58) 10.200.0.9(flag=1 Label=45) 10.200.0.20(Label=3)
 ```
-The optimize value is 28800 fixed, this situation is different than in the LSPs with auto-bandwidth that are optimized considering his average bandwidth. This knob will optimize all LSPs with the actual bandwitdh signalled and searching for a best path, or, without bandwidth signalled, only for a best path. 
+The optimization value is fixed at 28800. This situation differs from that of LSPs with automatic bandwidth, which are optimized considering their average bandwidth. This parameter will optimize all LSPs with the actual bandwidth signaled, searching for the best path, or, without the bandwidth signaled, only the best path.
 
-Everything is ok!!! Let's follow for the next tasks.
+All right! Let's proceed to the next tasks.
 
-Updating the tasks in our network: 
+Updating our task list:
 * ~~Become the network invisible for the external traceroutes~~
 * ~~Configure LSPs to be established trough specific color in backbone~~
 * ~~Configure explicit-paths to establish the LSPs trough specific path~~
@@ -659,12 +651,12 @@ Updating the tasks in our network:
 * ~~Configure auto-bandwitdh in some LSPs~~
 * ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
-* ~~Configure an automatic otimization of the LSPs.~~
+* ~~Configure an automatic otimization of the LSPs~~
 * Install different FECs in the FIB using LSPs RSVP
 * Connect the LDP islands with ldp-tunneling in the LSPs
 * Make traffic policies using LSPs to select the path for specific destinations
 
-Now, to install different FECs like the prefix of IX done in LDP. We'll install this prefix using RSVP LSPs. In this case, let's configure to R5 and R6 install this prefix in FIB preferring the RSVP LSP, this situation happen naturally because the preference of RSVP before LDP. 
+Now, let's install specific FECs, like the IX prefix. We'll prefer the RSVP LSP over LDP (which happens naturally due to protocol preference).
 ```
 set protocols mpls label-switched-path R5-R2-A install 192.168.12.0/24
 set protocols mpls label-switched-path R6-R1-A install 192.168.12.0/24
@@ -681,20 +673,20 @@ inet.3: 20 destinations, 27 routes (8 active, 0 holddown, 16 hidden)
 ```
 This way, when we have a packet with destination in the IX domain, the R5 will use this LSP to forward the traffic. 
 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes.~~
-* ~~Configure LSPs to be established trough specific color in backbone.~~
-* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
-* ~~Signal specific bandwidth in some LSPs.~~
-* ~~Configure auto-bandwitdh in some LSPs.~~
-* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+Updating our task list:
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
-* ~~Configure an automatic otimization of the LSPs.~~
-* ~~Install different FECs in the FIB using LSPs RSVP.~~
-* Connect the LDP islands with ldp-tunneling in the LSPs.
-* Make traffic policies using LSPs to select the path for specific destinations.
+* ~~Configure an automatic otimization of the LSPs~~
+* ~~Install different FECs in the FIB using LSPs RSVP~~
+* Connect the LDP islands with ldp-tunneling in the LSPs
+* Make traffic policies using LSPs to select the path for specific destinations
 
-Now, let's connect our LDP islands! Then, we'll have full connectivity via LDP. This task can be accomplished configuring ldp-tunneling in the LSPs that cross the LDP islands, here I'm making this in the R1, that have two LSPs established until the other LDP island. To guarantee this technique, we need to configure the interface lo0.0 in the protocols LDP also, I do it before to permit the target LDP sessions for L2VPNs Martini, and this is useful in this cenario also. 
+Time to connect our LDP islands! We can achieve full connectivity by using LDP tunneling over our RSVP LSPs. Don't forget to enable LDP on lo0.0 to allow the targeted LDP sessions.
 ```
 set protocols mpls label-switched-path R1-R8-A ldp-tunneling
 set protocols mpls label-switched-path R1-R6-A ldp-tunneling
@@ -731,7 +723,7 @@ Labels advertised: 10
      53      10.0.0.8/32
       0      192.168.12.0/24
 ```
-Here we can see that R1 and R8 are exchaning the LDP mapping messages with all FECs of our network. To view the LDP interconnection working, we can see in the R1 the route for R7. Theoretically, our traffic must go to R2, then R7 via LDP! 
+Here we can see that R1 and R8 are exchanging LDP mapping messages with all the FECs in our network. To visualize the LDP interconnection in action, we can see the route to R7 on R1. Theoretically, our traffic should pass through R2 and then through R7 via LDP!
 ```
 root@R1> traceroute mpls ldp 10.0.0.7 no-resolve detail 
   Probe options: ttl 64, retries 3, wait 10, paths 16, exp 7, fanout 16
@@ -779,23 +771,22 @@ root@R1> traceroute mpls ldp 10.0.0.7 no-resolve detail
 
   Path 1 via ae0.0 destination 127.0.0.64
 ```
-And voilà!!! Our LDP interconnection is working now. You can see in the traceroute that RSVP label is pushed and popped by R2, because in the RSVP we don't have the explicit-null configured, but in LDP yes, so R2 pop the RSVP label, then, swap the LDP label sended by R1 to 0 and forward to R7. 
+And voilà! Our LDP interconnection is working. You can see the RSVP label being pushed and popped while the LDP label stays inside.
 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes.~~
-* ~~Configure LSPs to be established trough specific color in backbone.~~
-* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
-* ~~Signal specific bandwidth in some LSPs.~~
-* ~~Configure auto-bandwitdh in some LSPs.~~
-* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+Updating our task list:
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
-* ~~Configure an automatic otimization of the LSPs.~~
-* ~~Install different FECs in the FIB using LSPs RSVP.~~
-* ~~Connect the LDP islands with ldp-tunneling in the LSPs.~~
-* Make traffic policies using LSPs to select the path for specific destinations.
+* ~~Configure an automatic otimization of the LSPs~~
+* ~~Install different FECs in the FIB using LSPs RSVP~~
+* ~~Connect the LDP islands with ldp-tunneling in the LSPs~~
+* Make traffic policies using LSPs to select the path for specific destinations
 
-Now, let's pick an example of forwarding accordingly the destination using MPLS! In this scenario, let's use our Provider 1, or most known as P1. P1 wants to communicate with P2 and P3, that are connected on R3. Between R8 and R3 we have two LSPs, so, in this case we'll load-balance the traffic between the LSPs. 
-The traffic of P1 to P2 will use LSP R8-A3-A and the traffic to P3 will use the R8-R3-B.
+Finally, let’s look at policy-based forwarding. If R8 needs to reach P2 and P3 (connected to R3), we can split the traffic between our two LSPs:
 ```
 set policy-options policy-statement load-balance-lsp term P2 from protocol bgp
 set policy-options policy-statement load-balance-lsp term P2 from community P2
@@ -827,18 +818,17 @@ inet.0: 221 destinations, 225 routes (218 active, 0 holddown, 5 hidden)
 ```
 And, mission accomplished!!!
 
-We have concluded all the tasks. 
-Updating the tasks in our network: 
-* ~~Become the network invisible for the external traceroutes.~~
-* ~~Configure LSPs to be established trough specific color in backbone.~~
-* ~~Configure explicit-paths to establish the LSPs trough specific path.~~
-* ~~Signal specific bandwidth in some LSPs.~~
-* ~~Configure auto-bandwitdh in some LSPs.~~
-* ~~Change the priority and hold value to make some LSPs priority in the backbone.~~
+We completed all the tasks.
+* ~~Become the network invisible for the external traceroutes~~
+* ~~Configure LSPs to be established trough specific color in backbone~~
+* ~~Configure explicit-paths to establish the LSPs trough specific path~~
+* ~~Signal specific bandwidth in some LSPs~~
+* ~~Configure auto-bandwitdh in some LSPs~~
+* ~~Change the priority and hold value to make some LSPs priority in the backbone~~
 * ~~Configure soft-preemption so that LSPs that will be preempted, will be resignaled before removed.~~
-* ~~Configure an automatic otimization of the LSPs.~~
-* ~~Install different FECs in the FIB using LSPs RSVP.~~
-* ~~Connect the LDP islands with ldp-tunneling in the LSPs.~~
-* ~~Make traffic policies using LSPs to select the path for specific destinations.~~
+* ~~Configure an automatic otimization of the LSPs~~
+* ~~Install different FECs in the FIB using LSPs RSVP~~
+* ~~Connect the LDP islands with ldp-tunneling in the LSPs~~
+* ~~Make traffic policies using LSPs to select the path for specific destinations~~
 
-See you in the next article to configure the protection in our RSVP LSPs!!!
+See you in the next article to configure protection on our RSVP LSPs!
