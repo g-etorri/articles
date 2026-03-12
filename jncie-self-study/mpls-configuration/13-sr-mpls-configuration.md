@@ -367,5 +367,10 @@ inet.3: 73 destinations, 105 routes (73 active, 0 holddown, 14 hidden)
 ```
 The path computed is R3 -> R2 -> R1 -> R4. And in the RIB the SPRING-TE have a bigger prefence than LDP. 
 
-Bonus: Let's include a admin-group constraint now. 
+Now, let's enable the microloop avoidance in the R3. This configuration made the router torn down the convergence path before X seconds to avoid loops, as the name says hahah.
+```
+set protocols isis spf-options microloop-avoidance post-convergence-path delay 10000
+```
+This configuration ensure that the convergence path will be torned down in 10 seconds, then, the router already have computed another path to forward the traffic normally. 
 
+Guys, we finished our MPLS configuration!!! Now, it's time to rest, and prepare to configure the VPN services in our network. See you next!!! 
