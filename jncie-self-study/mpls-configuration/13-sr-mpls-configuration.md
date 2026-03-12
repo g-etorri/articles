@@ -373,6 +373,6 @@ The microloop avoidance ensure that the traffic will be forwarded only when all 
 ```
 set protocols isis spf-options microloop-avoidance post-convergence-path delay 10000
 ```
-This configuration ensure that the backup path, converged by TI-LFA will be used at least 10 seconds, then, another path will be installed in the RIB considering the updated SPF. 
+This configuration ensure that the backup path, converged by TI-LFA will be used at least 10 seconds, then, another path will be installed in the FIB.  
 
 Guys, we finished our MPLS configuration!!! Now, it's time to rest, and prepare to configure the VPN services in our network. See you next!!! 
