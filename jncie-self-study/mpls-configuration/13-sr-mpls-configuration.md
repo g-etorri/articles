@@ -367,10 +367,12 @@ inet.3: 73 destinations, 105 routes (73 active, 0 holddown, 14 hidden)
 ```
 The path computed is R3 -> R2 -> R1 -> R4. And in the RIB the SPRING-TE have a bigger prefence than LDP. 
 
-Now, let's enable the microloop avoidance in the R3. This configuration made the router torn down the convergence path before X seconds to avoid loops, as the name says hahah.
+Now, let's enable the microloop avoidance in the R3. This is a sensible topic for me in the beggining. The microloop avoidance ensure that all the network have updated his SPF. Think with me in our topology, a traffic of the R7 to R4, if we have a fail between R5 and R4, during a little bit time, R5 update his routes considering the link to R4 as down, but for a little time also, R6 not receive this information yet, so, R5 forward the packets to R6 and R6 forward the packets to R5 for a moment, until R6 receives the information of the link down and calculates the best path again. 
+
+The microloop avoidance ensure that the traffic will be forwarded only when all the routers have updated his ribs. This is a powerful tool together with TI-LFA! 
 ```
 set protocols isis spf-options microloop-avoidance post-convergence-path delay 10000
 ```
-This configuration ensure that the convergence path will be torned down in 10 seconds, then, the router already have computed another path to forward the traffic normally. 
+This configuration ensure that the backup path, converged by TI-LFA will be used at least 10 seconds, then, another path will be installed in the RIB considering the updated SPF. 
 
 Guys, we finished our MPLS configuration!!! Now, it's time to rest, and prepare to configure the VPN services in our network. See you next!!! 
