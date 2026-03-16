@@ -5,14 +5,19 @@ What's up fellas. Today we'll start to delivery some services to our customers!!
 The topology you already... No!!! This time we have a new topology image! 
 <img width="1146" height="822" alt="image" src="https://github.com/user-attachments/assets/d7e82fbe-fd3a-4abb-872e-a6ff15d2a601" />
 
-It's time to enable the family inet-vpn in our backbone! Let's add the family in both cluster of RR:
+It's time to enable the family inet-vpn in our backbone! Let's add the family in both cluster of RR. 
 ```
 set protocols bgp group iBGP-AS65020-West family inet-vpn unicast nexthop-resolution no-resolution
 set protocols bgp group iBGP-AS65020-West family inet-vpn unicast no-install
 set protocols bgp group iBGP-AS65020-East family inet-vpn unicast nexthop-resolution no-resolution
 set protocols bgp group iBGP-AS65020-East family inet-vpn unicast no-install
 ```
-And enable the family in the clients:
+And, to optimize the advertisements, we can include the family route-target also! We can include the advertise-default knob in the RR to receive all RTs, but the clients will receive only the desired RTs. 
+```
+set protocols bgp group iBGP-AS65020-West family route-target advertise-default
+set protocols bgp group iBGP-AS65020-East family route-target advertise-default
+```
+And enable the families in the clients:
 ```
 
 root@RR> show bgp summary     
@@ -28,34 +33,42 @@ bgp.l3vpn.0
                       52         52          0          0          0          0
 Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
 10.0.0.1              65020         46         58       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 31/91/91/0
   inet6.0: 4/18/18/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.2              65020         46         73       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 1/91/91/0
   inet6.0: 14/18/18/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.3              65020         20         73       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 63/65/65/0
   inet6.0: 3/3/3/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.4              65020         19         74       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 1/13/13/0
   inet6.0: 0/0/0/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.5              65020         15         77       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 8/20/20/0
   inet6.0: 1/1/1/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.6              65020         14         73       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 15/15/15/0
   inet6.0: 0/0/0/0
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.7              65020         17         79       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 0/1/1/0
   inet6.0: 0/0/0/0                      
   bgp.l3vpn.0: 0/0/0/0
 10.0.0.8              65020         13         78       0       0        1:31 Establ
+  bgp.rtarget.0: 0/0/0/0
   inet.0: 31/31/31/0
   inet6.0: 1/1/1/0
   bgp.l3vpn.0: 0/0/0/0
@@ -334,4 +347,97 @@ To have a default route in our VRF, let's create this setting to inet.0 table.
 ```
 set routing-instances VRF-C1 routing-options static route 0.0.0.0/0 next-table inet.0
 ```
+And, to inject this route into OSPF, we need to do it with a route-policy. 
+```
+set policy-options policy-statement redistribute-ospf-vrf-c1 term default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement redistribute-ospf-vrf-c1 term default then accept
 
+set routing-instances VRF-C1 protocols ospf export redistribute-ospf-vrf-c1
+```
+Ok, now we are redistritibuting this route into OSPF correctly. But, we don't have internet access yet. 
+
+We need to leak these routes into our inet.0, and export this prefix to our peerings. 
+
+First, let's leak this routes into inet.0 trough a rib-group. To create the rib-group, first we set the source rib, then the destination rib, and to leak the OSPF routes we need to apply this rib-group into OSPF configuration. 
+```
+set routing-options rib-groups leak-c1-routes import-rib [ VRF-C1.inet.0 inet.0 ]
+
+set routing-instances VRF-C1 protocols ospf rib-groups inet leak-c1-routes
+```
+Now, if we check the inet.0, we already have the routes of site 2. 
+```
+root@R4> show route table inet.0 10.1.0.0/24    
+
+inet.0: 231 destinations, 237 routes (224 active, 0 holddown, 7 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.1.0.2/32        *[OSPF/10] 00:01:19, metric 3
+                    >  to 10.1.4.2 via ge-0/0/8.100
+10.1.0.3/32        *[OSPF/10] 00:01:19, metric 2
+                    >  to 10.1.4.2 via ge-0/0/8.100
+```
+Ok, with this, we are ready to provide internet access to this customer. To make this things pretty, let's create an aggregate prefix to export for our peering correctly, and we'll mark this prefix as customer prefix, as the other peering customer prefixes. 
+```
+set routing-options aggregate route 10.1.0.0/24 as-path aggregator 65020 10.0.0.4
+set routing-options aggregate route 10.1.0.0/24 discard
+
+set policy-options policy-statement Saida-RR term 1 from protocol bgp
+set policy-options policy-statement Saida-RR term 1 then accept
+set policy-options policy-statement Saida-RR term 2 from protocol aggregate
+set policy-options policy-statement Saida-RR term 2 from route-filter 10.1.0.0/24 exact
+set policy-options policy-statement Saida-RR term 2 then community add Customer
+set policy-options policy-statement Saida-RR term 2 then accept
+```
+This way, our customer will have internet access trough R4. Let's ask a test to the customer now:
+```
+[admin@CE1-2] > tool traceroute src-address=10.1.0.2 201.1.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS      LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.1.23.2    0%       3  0.6ms   0.5   0.5   0.6    0      
+2  10.1.4.1     0%       3  16.8ms  12.8  4.5   17     5.8    
+3  10.200.0.17  0%       3  22ms    41    22    53     13.6   
+4  201.1.0.1    0%       3  14.4ms  15.1  13    17.8   2    
+```
+And... everything looks ok! But, we need to ensure the internet access if the R4 fails, so, we need to replicate this configuration on R3 to ensure the redundancy. You can do it, right? I trust you. 
+
+Now, let's go for the Customer 2! 
+
+Customer 2 wants a hub and spoke topology. Where the Site 1 is a hub, composed of two routers and all the network will have internet access trough the Site 1. This is a classic L3VPN structure. 
+
+First of all, let's understand the methodology. We'll have two VRFs configured (HUB and SPOKE) in the routers connected to the hub, and three links. 
+* Internet link, this link will provide internet access for the site.
+* VRF-HUB link, trough this link the PEs will import the routes from hub, without accept routes from SPOKE PEs. The SPOKE PEs will accept the routes with this RT. Customer ask us to not receive the routes from the other hub routers, because he haves a backdoor link. 
+* VRF-SPOKE link, trough this link the PEs will export the routes to hub, without accept routes from the hub routers. The SPOKE PEs will export the routes with this RT.
+
+This way, we can organize the spoke prefixes, and hub prefixes. 
+
+First, let's pin the details of the BGP connections. 
+| Customer | Site | Router | PE-CE Protocol | Protocol Details |
+| ------- | ---- | -------- | --------------- | --------------------- |
+| C2      | S1   | CE2-1    | BGP             | AS64702               |
+| C2      | S1   | CE2-2    | BGP             | AS64702               |
+| C2      | S2   | CE2-3    | BGP             | AS64702               |
+| C2      | S2   | CE2-4    | BGP             | AS64702               |
+| C2      | S3   | CE2-5    | BGP             | AS64702               |
+
+Now, let's start configuring the HUB-VRF! This VRF will be configured only on the R1 and R2, and will only receive the hub routes. 
+```
+set routing-instances VRF-C2-HUB instance-type vrf
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB type external
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB description eBGP-CE2-1-HUB
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB export deny-all
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB peer-as 64702
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB as-override
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB neighbor 10.2.1.2 family inet unicast
+set routing-instances VRF-C2-HUB description VRF-C2-HUB
+set routing-instances VRF-C2-HUB interface ge-0/0/8.200
+set routing-instances VRF-C2-HUB interface lo0.1
+set routing-instances VRF-C2-HUB route-distinguisher 10.0.0.1:200
+set routing-instances VRF-C2-HUB vrf-target target:65020:200
+set routing-instances VRF-C2-HUB vrf-table-label
+
+set policy-options policy-statement deny-all then reject
+```
+As I said, we won't export prefixes trough this session. Only receive the routes to export to the spoke sites, so I made an policy to reject all. 
+
+Now, let's make 
