@@ -455,19 +455,7 @@ root@R1> show bgp summary group eBGP-C2-AS64702
 Threading mode: BGP I/O
 Default eBGP mode: advertise - accept, receive - accept
 Groups: 5 Peers: 6 Down peers: 0
-Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
-bgp.rtarget.0        
-                       1          1          0          0          0          0
-inet.0               
-                     167        146          0          0          0          0
-inet6.0              
-                      22          6          0          0          0          0
-bgp.l3vpn.0          
-                      26         20          0          0          0          0
-bgp.evpn.0           
-                       0          0          0          0          0          0
-bgp.mvpn.0           
-                       0          0          0          0          0          0
+...
 Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
 10.2.1.10             64702      43528      47600       0       0 2w1d 2:40:10 Establ
   inet.0: 1/1/1/0
@@ -488,23 +476,7 @@ root@R2> show bgp summary group eBGP-CE2-AS64702
 Threading mode: BGP I/O
 Default eBGP mode: advertise - accept, receive - accept
 Groups: 5 Peers: 6 Down peers: 0
-Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
-bgp.rtarget.0        
-                       1          1          0          0          0          0
-inet.0               
-                     191        146          0          0          0          0
-inet.3               
-                       0          0          0          0          0          0
-inet6.0              
-                      24          7          0          0          0          0
-bgp.l3vpn.0          
-                      26         26          0          0          0          0
-bgp.l2vpn.0          
-                       0          0          0          0          0          0
-bgp.evpn.0           
-                       0          0          0          0          0          0
-bgp.mvpn.0           
-                       0          0          0          0          0          0
+...
 Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
 10.2.2.10             64702      43529      47601       0       0 2w1d 2:40:48 Establ
   inet.0: 1/1/1/0
@@ -538,6 +510,8 @@ First, let's pin the details of the BGP connections.
 Now, let's start configuring the HUB-VRF! This VRF will be configured only on the R1 and R2, and will only receive the hub routes. 
 R1:
 ```
+set routing-options autonomous-system loops 3
+
 set routing-instances VRF-C2-HUB instance-type vrf
 set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB type external
 set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB description eBGP-CE2-1-HUB
@@ -556,6 +530,8 @@ set policy-options policy-statement deny-all then reject
 ```
 R2:
 ```
+set routing-options autonomous-system loops 3
+
 set routing-instances VRF-C2-HUB instance-type vrf
 set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB type external
 set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB description eBGP-CE2-2-HUB
@@ -573,5 +549,49 @@ set routing-instances VRF-C2-HUB vrf-table-label
 set policy-options policy-statement deny-all then reject
 ```
 As I said, we won't export prefixes trough this session. Only receive the routes to export to the spoke sites, so I made an policy to reject all. 
+Note: Here we can see two different knobs used: 
+* AS Loops, we are using this to receive the default route in the VRF-HUB, this way the Customer can export the default route received from us to the spoke sites.
+* as-override, this knob is used to avoid routes rejected by AS-LOOP both on the spoke sites and hub sites. Think with me, if we receive the loopback address from HUB, when we export this route to a spoke site, we'll export this route with the AS64702 on th AS-PATH, and the spoke have this AS also, so, to avoid loops this route could be rejected. With the as-override, we are removing the customer AS to handle this behavior, the AS-PATH will contain only our AS, the AS65020!
 
-Now, let's make 
+Now, let's check the sessions and what we have in the VRF-HUB! 
+```
+root@R1> show bgp summary group eBGP-CE2-1-HUB  
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 5 Peers: 6 Down peers: 0
+...
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.2.1.2              64702      43546      47626       0       0 2w1d 2:51:00 Establ
+  VRF-C2-HUB.inet.0: 3/3/3/0
+
+root@R1> show route receive-protocol bgp 10.2.1.2 table VRF-C2-HUB.inet.0 
+
+VRF-C2-HUB.inet.0: 8 destinations, 11 routes (8 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.2.1.2                                64702 65020 I
+* 10.2.0.1/32             10.2.1.2                                64702 I
+* 10.2.0.2/32             10.2.1.2                                64702 I
+
+root@R2> show bgp summary group eBGP-CE2-2-HUB    
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 5 Peers: 6 Down peers: 0
+...
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.2.2.2              64702      43543      47629       0       0 2w1d 2:51:44 Establ
+  VRF-C2-HUB.inet.0: 3/3/3/0
+
+root@R2> show route receive-protocol bgp 10.2.2.2 table VRF-C2-HUB.inet.0 
+
+VRF-C2-HUB.inet.0: 8 destinations, 11 routes (8 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.2.2.2                                64702 65020 I
+* 10.2.0.1/32             10.2.2.2                                64702 I
+* 10.2.0.2/32             10.2.2.2                                64702 I
+```
+We are receiving a route with our own AS in the AS-PATH, so the loops are working!!! 
+
+Now, let's make the VRF-SPOKE in the R1 and R2, this still be simple. In the SPOKE PEs will be different. 
+```
+
+```
