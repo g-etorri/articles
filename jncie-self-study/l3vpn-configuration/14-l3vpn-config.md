@@ -411,6 +411,121 @@ First of all, let's understand the methodology. We'll have two VRFs configured (
 
 This way, we can organize the spoke prefixes, and hub prefixes. 
 
+First, let's establish the internet access to the customer, this will be a common BGP peering with him. We'll export only a default route and accept the 10.2.0.0/24 prefix from customer. 
+R1:
+```
+set policy-options policy-statement Entrada-CE2 term 1 from route-filter 10.2.0.0/24 exact
+set policy-options policy-statement Entrada-CE2 term 1 then accept
+set policy-options policy-statement Entrada-CE2 term 1 then community add Customer
+set policy-options policy-statement Entrada-CE2 then reject
+
+set policy-options policy-statement Saida-CE2 term 1 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-CE2 term 1 then accept
+set policy-options policy-statement Saida-CE2 then reject
+
+set protocols bgp group eBGP-C2-AS64702 type external
+set protocols bgp group eBGP-C2-AS64702 description eBGP-C2-AS64702
+set protocols bgp group eBGP-C2-AS64702 import Entrada-CE2
+set protocols bgp group eBGP-C2-AS64702 export Saida-CE2
+set protocols bgp group eBGP-C2-AS64702 peer-as 64702
+set protocols bgp group eBGP-C2-AS64702 neighbor 10.2.1.10 family inet unicast
+```
+R2:
+```
+set policy-options policy-statement Entrada-CE2 term 1 from route-filter 10.2.0.0/24 exact
+set policy-options policy-statement Entrada-CE2 term 1 then accept
+set policy-options policy-statement Entrada-CE2 term 1 then community add Customer
+set policy-options policy-statement Entrada-CE2 then reject
+
+set policy-options policy-statement Saida-CE2 term 1 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-CE2 term 1 then accept
+set policy-options policy-statement Saida-CE2 then reject
+
+set protocols bgp group eBGP-CE2-AS64702 type external
+set protocols bgp group eBGP-CE2-AS64702 description eBGP-CE2-AS64702
+set protocols bgp group eBGP-CE2-AS64702 import Entrada-CE2
+set protocols bgp group eBGP-CE2-AS64702 export Saida-CE2
+set protocols bgp group eBGP-CE2-AS64702 peer-as 64702
+set protocols bgp group eBGP-CE2-AS64702 neighbor 10.2.2.10 family inet unicast
+```
+Let's check the stats of the BGP session!! 
+
+```
+root@R1> show bgp summary group eBGP-C2-AS64702       
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 5 Peers: 6 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       1          1          0          0          0          0
+inet.0               
+                     167        146          0          0          0          0
+inet6.0              
+                      22          6          0          0          0          0
+bgp.l3vpn.0          
+                      26         20          0          0          0          0
+bgp.evpn.0           
+                       0          0          0          0          0          0
+bgp.mvpn.0           
+                       0          0          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.2.1.10             64702      43528      47600       0       0 2w1d 2:40:10 Establ
+  inet.0: 1/1/1/0
+
+root@R1> show route receive-protocol bgp 10.2.1.10 table inet.0 
+
+inet.0: 224 destinations, 247 routes (220 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.2.0.0/24             10.2.1.10                               64702 I
+
+root@R1> show route advertising-protocol bgp 10.2.1.10 table inet.0 
+
+inet.0: 224 destinations, 247 routes (220 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               Self                                    I
+..........
+root@R2> show bgp summary group eBGP-CE2-AS64702                   
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 5 Peers: 6 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0        
+                       1          1          0          0          0          0
+inet.0               
+                     191        146          0          0          0          0
+inet.3               
+                       0          0          0          0          0          0
+inet6.0              
+                      24          7          0          0          0          0
+bgp.l3vpn.0          
+                      26         26          0          0          0          0
+bgp.l2vpn.0          
+                       0          0          0          0          0          0
+bgp.evpn.0           
+                       0          0          0          0          0          0
+bgp.mvpn.0           
+                       0          0          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.2.2.10             64702      43529      47601       0       0 2w1d 2:40:48 Establ
+  inet.0: 1/1/1/0
+
+root@R2> show route receive-protocol bgp 10.2.2.10 table inet.0    
+
+inet.0: 225 destinations, 272 routes (220 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.2.0.0/24             10.2.2.10                               64702 I
+
+root@R2> show route advertising-protocol bgp 10.2.2.10 table inet.0 
+
+inet.0: 225 destinations, 272 routes (220 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               Self                                    I
+
+```
+Everything looks ok to the customer access the internet!!! Let's verify this access later. 
+
+Now, let's go to the L3VPN! 
+
 First, let's pin the details of the BGP connections. 
 | Customer | Site | Router | PE-CE Protocol | Protocol Details |
 | ------- | ---- | -------- | --------------- | --------------------- |
@@ -421,6 +536,7 @@ First, let's pin the details of the BGP connections.
 | C2      | S3   | CE2-5    | BGP             | AS64702               |
 
 Now, let's start configuring the HUB-VRF! This VRF will be configured only on the R1 and R2, and will only receive the hub routes. 
+R1:
 ```
 set routing-instances VRF-C2-HUB instance-type vrf
 set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-1-HUB type external
@@ -433,6 +549,24 @@ set routing-instances VRF-C2-HUB description VRF-C2-HUB
 set routing-instances VRF-C2-HUB interface ge-0/0/8.200
 set routing-instances VRF-C2-HUB interface lo0.1
 set routing-instances VRF-C2-HUB route-distinguisher 10.0.0.1:200
+set routing-instances VRF-C2-HUB vrf-target target:65020:200
+set routing-instances VRF-C2-HUB vrf-table-label
+
+set policy-options policy-statement deny-all then reject
+```
+R2:
+```
+set routing-instances VRF-C2-HUB instance-type vrf
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB type external
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB description eBGP-CE2-2-HUB
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB export deny-all
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB peer-as 64702
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB as-override
+set routing-instances VRF-C2-HUB protocols bgp group eBGP-CE2-2-HUB neighbor 10.2.2.2 family inet unicast
+set routing-instances VRF-C2-HUB description VRF-C2-HUB
+set routing-instances VRF-C2-HUB interface ge-0/0/7.200
+set routing-instances VRF-C2-HUB interface lo0.1
+set routing-instances VRF-C2-HUB route-distinguisher 10.0.0.2:200
 set routing-instances VRF-C2-HUB vrf-target target:65020:200
 set routing-instances VRF-C2-HUB vrf-table-label
 
