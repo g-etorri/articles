@@ -182,6 +182,8 @@ set routing-instances VRF-C1 protocols ospf area 0.0.0.0 sham-link-remote 10.1.3
 set routing-instances VRF-C1 protocols ospf area 0.0.0.0 sham-link-remote 10.1.4.254
 set routing-instances VRF-C1 protocols ospf area 0.0.0.0 sham-link-remote 10.1.6.254
 ```
+Note: In the sham-link between R3 and R4 we need to add the metric 100, because the customer prefers to use his backdoor link in this site. So, our backbone is used as backup in this case. 
+
 Let's verify if we have established the adjacencies:
 ```
 root@R8> show ospf neighbor instance VRF-C1           
@@ -399,6 +401,28 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 4  201.1.0.1    0%       3  14.4ms  15.1  13    17.8   2    
 ```
 And... everything looks ok! But, we need to ensure the internet access if the R4 fails, so, we need to replicate this configuration on R3 to ensure the redundancy. You can do it, right? I trust you. 
+But, to avoid a problem of suboptimal routing, let's export the /32 address without community to RR also. This way, if the R4 don't have a route installed in the inet.0 and R3 have, the R3 will export the /32 address to RR and R4 won't discard the traffic and can forward to R3, or vice-versa. 
+```
+set policy-options policy-statement Saida-RR term 3 from route-filter 10.1.0.0/24 prefix-length-range /32-/32
+set policy-options policy-statement Saida-RR term 3 then accept
+```
+Check the result:
+```
+root@R3> show route 10.1.0.0/24 
+
+inet.0: 233 destinations, 242 routes (225 active, 0 holddown, 9 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.1.0.0/24        *[Aggregate/130] 1w0d 15:45:15
+                       Discard
+10.1.0.2/32        *[OSPF/10] 1w0d 15:45:15, metric 2
+                    >  to 10.1.3.2 via ge-0/0/8.100
+10.1.0.3/32        *[OSPF/10] 00:22:01, metric 3
+                    >  to 10.1.3.2 via ge-0/0/8.100
+                    [BGP/170] 00:01:43, MED 2, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.13 via ge-0/0/2.0, label-switched-path to-R4
+```
 
 Now, let's go for the Customer 2! 
 
@@ -983,3 +1007,67 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 You can see, that we have full connectivity with all sites. And we have internet access also!!! 
 Mission accomplished. 
 
+When I was finishing my expedient, both customers contact me, they want to have connectivity between CE1-3 e CE2-3 only, without export any route to the other CEs. 
+
+Good, this is so ugly... But we need to delivery the service. 
+
+To achieve this, we'll use rib-groups!!! 
+
+First, let's leak the routes from Customer 1 to the Customer 2 RIB on R4. This configuration I'll made only on the R4, because if R4 fails, we won't have any connectivity between the routers.  
+
+In this case, I'll add the Customer 2 routing table on the rib-group already existent. 
+```
+set routing-options rib-groups leak-c1-routes import-rib VRF-C2-SPOKE.inet.0
+show routing-options rib-groups leak-c1-routes | display set
+set routing-options rib-groups leak-c1-routes import-rib [ VRF-C1.inet.0 inet.0 VRF-C2-SPOKE.inet.0 ] 
+```
+We already have the routes on the Customer 2 RIB.
+```
+root@R4> show route table VRF-C2-SPOKE.inet.0 10.1.0.0/16 
+
+VRF-C2-SPOKE.inet.0: 25 destinations, 30 routes (19 active, 0 holddown, 7 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.1.0.3/32        *[OSPF/10] 00:00:18, metric 2
+                    >  to 10.1.4.2 via ge-0/0/8.100
+10.1.23.0/30       *[OSPF/10] 00:00:18, metric 2
+                    >  to 10.1.4.2 via ge-0/0/8.100
+```
+Ok, now let's leak the Customer 2 routes to Customer 1, creating the rib-group and apply it on BGP session. To restrict the communication to CE2-3 only, we can create a routing policy matching this specific prefixes also. 
+```
+set policy-options policy-statement export-c2-routers-to-c1 term 1 from route-filter 10.2.0.3/32 exact
+set policy-options policy-statement export-c2-routers-to-c1 term 1 from route-filter 10.2.4.0/30 exact
+set policy-options policy-statement export-c2-routers-to-c1 term 1 then accept
+set policy-options policy-statement export-c2-routers-to-c1 then reject
+
+set routing-options rib-groups leak-c2-routes-to-c1 import-rib [ VRF-C2-SPOKE.inet.0 VRF-C1.inet.0
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-3-SPOKE neighbor 10.2.4.2 family inet unicast rib-group leak-c2-routes-to-c1
+set routing-options rib-groups leak-c2-routes-to-c1 import-policy export-c2-routers-to-c1
+```
+We already can see the routes on the Customer 1 RIB:
+```
+root@R4> show route table VRF-C1.inet.0 10.2.0.0/16    
+
+VRF-C1.inet.0: 18 destinations, 27 routes (18 active, 0 holddown, 7 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.2.0.3/32        *[BGP/170] 2w2d 18:34:57, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.4.2 via ge-0/0/9.201
+10.2.4.0/30        *[BGP/170] 2w2d 18:34:57, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.4.2 via ge-0/0/9.201
+```
+Ok, now let's ask to test this connectivity: 
+```
+[admin@CE2-3] > tool traceroute src-address=10.2.0.3 10.1.0.3
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS   LOSS  SENT  LAST   AVG    BEST  WORST  STD-DEV
+1  10.2.4.1  0%       4  4ms    103.6  1.4   400.8  171.6  
+2  10.1.0.3  0%       4  2.2ms  2      1.8   2.2    0.1    
+```
+And... Now, everything is ok!!!
+
+You can ask yourself if the Customer 3 configuration is missing. And, I answer... Yes! But the Customer 3 have only IPv6, so, I'll configure this in the next article that I'll write about 6PE.
+
+That's all for today. See you soon!!
