@@ -1,11 +1,11 @@
 # L3VPN Configuration
 
-What's up fellas. Today we'll start to delivery some services to our customers!!! We'll start with L3VPNs. 
+What's up fellas. Today we’re going to roll out some services to our customers! We're kicking things off with L3VPNs.
 
-The topology you already... No!!! This time we have a new topology image! 
+You already know the topology... Wait, no! This time we've got a brand new one! 
 <img width="1146" height="822" alt="image" src="https://github.com/user-attachments/assets/d7e82fbe-fd3a-4abb-872e-a6ff15d2a601" />
 
-It's time to enable the family inet-vpn in our backbone! Let's add the family in both cluster of RR. 
+It's time to enable the family inet-vpn in our backbone! Let's enable the family on both RR clusters.
 ```
 set protocols bgp group iBGP-AS65020-West family inet-vpn unicast nexthop-resolution no-resolution
 set protocols bgp group iBGP-AS65020-West family inet-vpn unicast no-install
@@ -75,7 +75,7 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 ```
 Ok, our BGP mesh is prepared to delivery the L3VPN services!!!
 
-First, let's made the boriest step of the topology. Configure all interfaces accordingly this table:
+First, let's get through the most boring part of the topology: configuring all interfaces according to this table.
 | Router | Interface    | IP Address    |  IPv6 Address             | Customer    |
 | ------ | ------------ | ------------- | ------------------------- | ----------- |
 | R1     | ge-0/0/8.200 | 10.2.1.1/30   |                           | C2-Hub      |
@@ -130,9 +130,9 @@ set interfaces lo0 unit 2 family inet address 10.2.1.253/32
 
 Ok, now I'll explore each customer individually. We have 3 L3VPN customers today
 
-To keep the organization, before all the configuration let's define the RTs and RDs models. I'll use the identificator 100 for Customer 1, 200 for Customer 2 and 300 for Customer 3. For RDs we'll adopt the RD type 2, this is the best RD! And for RTs, we'll use our ASN. 
+To keep the organization, before all the configuration let's define the RTs and RDs models. I'll use the identificator 100 for Customer 1, 200 for Customer 2 and 300 for Customer 3. For RDs, we'll go with Type 2—the gold standard! And for RTs, we'll use our ASN. 
 
-For example, Customer 1 at R8. The RD will be 10.0.0.8:100 and the RT will be target:65020:100, got it? I'm sure yes. 
+For example, Customer 1 at R8. The RD will be 10.0.0.8:100 and the RT will be target:65020:100, got it? I bet you do.
 
 The Customer 1, this customer wants a full mesh communication and all the routers inside the same OSPF area. 
 | Customer| Site | Router   | PE-CE Protocol  | Protocol Details      |
@@ -142,7 +142,7 @@ The Customer 1, this customer wants a full mesh communication and all the router
 | C1      | S2   | CE1-3    | OSPF            | Area 0.0.0.0          |
 | C1      | S3   | CE1-4    | OSPF            | Area 0.0.0.0          |
 
-This customer have the Site 1 connected in R8, Site 3 connected in R6 and in his Site 2, customer haves two routers CE1-2 connected in R3 and the CE1-3 connected in R4, between these two routers there is a OSPF link, and we need to ensure if this link fails, the customer can use our backbone to the communicate these sites. 
+This customer has the Site 1 connected in R8, Site 3 connected in R6 and in his Site 2, customer has two routers CE1-2 connected in R3 and the CE1-3 connected in R4, between these two routers there is a OSPF link, and we need to ensure if this link fails, the customer can use our backbone to the communicate these sites. 
 
 So, the lore is explained. Let's go to the configuration. 
 
@@ -158,7 +158,7 @@ set routing-instances VRF-C1 route-distinguisher 10.0.0.8:100
 set routing-instances VRF-C1 vrf-target target:65020:100
 set routing-instances VRF-C1 vrf-table-label
 ```
-The vrf-table-label knob is used to define a label without have a next-hop in the VRF. This is perfect to efford resources, and to troubleshooting, considering that we have a loopback defined into VRF.
+The vrf-table-label knob is used to define a label without having a next-hop in the VRF. This is perfect for saving resources, and to troubleshooting, considering that we have a loopback defined into VRF.
 
 Now, let's repeat this configuration similarly in the other routers. I'll omit here to not extend this doc. 
 
@@ -170,12 +170,12 @@ Address          Interface              State           ID               Pri  De
   Area 0.0.0.0, opt 0x2, DR 0.0.0.0, BDR 0.0.0.0
   Up 1w0d 02:10:10, adjacent 1w0d 02:10:10
 ```
-Everything is good so far. Now, to permit the communication trough the L3VPN, we need to export the BGP routes from the other sites. But, if we do this we'll have a little problem that the customer have pointed, our router will flood these routes as LSAs type 3. 
+Everything is good so far. Now, to permit the communication through the L3VPN, we need to export the BGP routes from the other sites. But, if we do this we'll have a little problem that the customer have pointed, our router will flood these routes as LSAs type 3. 
 To avoid this, we can use an OSPF feature, the sham-links!!!
 
 With sham-links, we can establish a virtual-adjacency between our backbone routers inside the VRF, and for the customer the network will be a simple OSPF domain. 
 
-To do this, we only need to define the local address and the remote-address of the sham-link. Let's configure the R8 and similarly the another ones. 
+To do this, we only need to define the local address and the remote-address of the sham-link. Let's configure the R8 and similarly on the others. 
 ```
 set routing-instances VRF-C1 protocols ospf sham-link local 10.1.8.254
 set routing-instances VRF-C1 protocols ospf area 0.0.0.0 sham-link-remote 10.1.3.254
@@ -343,7 +343,7 @@ Mission accomplished!!!
 
 Oh... wait. Customer is calling me, now he asked to have internet trough site 2 without changes in his network. 
 
-No... now we need to make a ugly change. We need to export a default route into OSPF, and leak the loopback addresses of site 2 to our inet.0. Let's do it. 
+Oh boy... now we have to implement a nasty workaround.. We need to export a default route into OSPF, and leak the loopback addresses of site 2 to our inet.0. Let's do it. 
 
 To have a default route in our VRF, let's create this setting to inet.0 table. 
 ```
@@ -1039,7 +1039,7 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 You can see, that we have full connectivity with all sites. And we have internet access also!!! 
 Mission accomplished. 
 
-When I was finishing my expedient, both customers contact me, they want to have connectivity between CE1-3 e CE2-3 only, without export any route to the other CEs. 
+When I was finishing my workday, both customers contact me, they want to have connectivity between CE1-3 e CE2-3 only, without export any route to the other CEs. 
 
 Good, this is so ugly... But we need to delivery the service. 
 
