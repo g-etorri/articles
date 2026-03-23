@@ -358,6 +358,38 @@ set routing-instances VRF-C1 protocols ospf export redistribute-ospf-vrf-c1
 ```
 Ok, now we are redistritibuting this route into OSPF correctly. But, we don't have internet access yet. 
 
+Before finish the configuration to provide internet access. We need to remember a requirement of the customer. Only the Site 2 must have internet access, so we can't export this route to other PEs. 
+
+By default, Junos export the static route automatically into L3VPN. So, we need to create export and import policies for the VRF. 
+```
+set policy-options policy-statement Entrada-VRF-C1 term 1 from community target-ce1
+set policy-options policy-statement Entrada-VRF-C1 term 1 then accept
+set policy-options policy-statement Entrada-VRF-C1 then reject
+
+set policy-options policy-statement Saida-VRF-C1 term 1 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-VRF-C1 term 1 then reject
+set policy-options policy-statement Saida-VRF-C1 term 2 then community add target-ce1
+set policy-options policy-statement Saida-VRF-C1 term 2 then accept
+set policy-options policy-statement Saida-VRF-C1 then reject
+
+delete routing-instances VRF-C1 vrf-target
+set routing-instances VRF-C1 vrf-import Entrada-VRF-C1
+set routing-instances VRF-C1 vrf-export Saida-VRF-C1
+```
+Let's check the results: 
+```
+root@R4> show route advertising-protocol bgp 10.0.0.0 table VRF-C1.inet.0 
+
+VRF-C1.inet.0: 18 destinations, 28 routes (18 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.1.0.2/32             Self                 3       100        I
+* 10.1.0.3/32             Self                 2       100        I
+* 10.1.4.0/30             Self                         100        I
+* 10.1.4.254/32           Self                         100        I
+* 10.1.23.0/30            Self                 2       100        I
+```
+Looks good. Now, let's continue the internet access configuration. 
+
 We need to leak these routes into our inet.0, and export this prefix to our peerings. 
 
 First, let's leak this routes into inet.0 trough a rib-group. To create the rib-group, first we set the source rib, then the destination rib, and to leak the OSPF routes we need to apply this rib-group into OSPF configuration. 
@@ -1058,6 +1090,12 @@ VRF-C1.inet.0: 18 destinations, 27 routes (18 active, 0 holddown, 7 hidden)
                       AS path: 64702 I, validation-state: unverified
                     >  to 10.2.4.2 via ge-0/0/9.201
 ```
+If you remember the configuration that we made in the internet access configuration, you can see the problem here. To the other PEs don't have this route, we need to reject these prefixes in the export policy also. 
+```
+set policy-options policy-statement Saida-VRF-C1 term 1 from route-filter 10.2.0.0/24 upto /32
+set policy-options policy-statement Saida-VRF-C1 term 1 from route-filter 10.2.4.0/24 upto /32
+```
+
 Ok, now let's ask to test this connectivity: 
 ```
 [admin@CE2-3] > tool traceroute src-address=10.2.0.3 10.1.0.3
