@@ -61,33 +61,34 @@ set routing-instances VRF-C2-SPOKE protocols pim interface all
 
 With this, we can see the Intra-AS I-PMSI routes, or MVPN type 1 routes. 
 ```
-root@RR> show route table bgp.mvpn.0           
+root@R1> show route table VRF-C2-HUB.mvpn   
 
-bgp.mvpn.0: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+VRF-C2-HUB.mvpn.0: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
 + = Active Route, - = Last Active, * = Both
 
 1:10.0.0.1:200:10.0.0.1/240               
-                   *[BGP/170] 00:49:10, localpref 100
-                      AS path: I, validation-state: unverified
-                    >  to 10.0.0.1
+                   *[MVPN/70] 01:02:31, metric2 1
+                       Indirect
 1:10.0.0.2:200:10.0.0.2/240               
-                   *[BGP/170] 00:45:02, localpref 100
+                   *[BGP/170] 00:58:21, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
-                    >  to 10.0.0.2
+                    >  to 10.200.0.1 via ae0.0, Push 0
 1:10.0.0.4:201:10.0.0.4/240               
-                   *[BGP/170] 00:41:05, localpref 100
+                   *[BGP/170] 00:54:24, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
-                    >  to 10.0.0.4
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 0
 1:10.0.0.5:201:10.0.0.5/240               
-                   *[BGP/170] 00:40:45, localpref 100
+                   *[BGP/170] 00:54:04, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
-                    >  to 10.0.0.5
+                    >  to 10.200.0.1 via ae0.0, Push 10106, Push 10107, Push 10108(top)
+                       to 10.200.0.5 via ge-0/0/3.0, Push 10106, Push 10107, Push 10108(top)
 1:10.0.0.7:201:10.0.0.7/240               
-                   *[BGP/170] 00:40:32, localpref 100
+                   *[BGP/170] 00:53:51, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
-                    >  to 10.0.0.7      
+                    >  to 10.200.0.1 via ae0.0, Push 45     
 ```
-This route is used for autodiscovery of the MVPN. Do you remember the MVPN routes? 
+Note: The route format of MVPN route type 1 is ROUTE-TYPE:ROUTE-DISTINGUISHER:ORIGIN.
+This route is used for autodiscovery of the MVPN. Do you remember the MVPN routes? I don't. 
 
 I'll give you a table with the routes:
 
@@ -101,4 +102,52 @@ I'll give you a table with the routes:
 | Type 6 | Shared Tree Join | Receiver PE | Used to join a shared tree, in other words, to receive the stream from RP |
 | Type 7 | Source Tree Join | Receiver PE | Used to join a source based tree, the PE wants to receive the stream from the source |
 
-This table will facilitate our undestanding about MVPN. 
+This table will facilitate our understanding about MVPN. 
+
+Now, checking our MVPN instance, we can see the members:
+```
+root@R1> show mvpn instance all 
+
+MVPN instance:
+Legend for neighbor state (St)
+A-    Preferred upstream neighbor for inter-AS
+
+Legend for provider tunnel
+S-    Selective provider tunnel
+F-    Flood NH forwarding NH
+M-    Multicast Composite NH
+C-    Cloned NH
+
+Legend for c-multicast routes properties (St)
+DS -- derived from (*, c-g)          RM -- remote VPN route
+I -- Inactive
+Family : INET
+    
+Instance : VRF-C2-HUB
+  MVPN Mode : SPT-ONLY
+  Sender-Based RPF: Disabled. Reason: Not enabled by configuration.
+  Hot Root Standby: Disabled. Reason: Not enabled by configuration.
+  Provider tunnel: I-P-tnl:RSVP-TE P2MP:10.0.0.1, 60991,10.0.0.1
+  Neighbor                      Inclusive Provider Tunnel                           Label-In    St             Segment
+  10.0.0.2                              
+  10.0.0.4              
+  10.0.0.5              
+  10.0.0.7              
+```
+And, we can see the PIM neighbor of the instance:
+```
+root@R1> show pim neighbors instance all 
+B = Bidirectional Capable, G = Generation Identifier
+H = Hello Option Holdtime, L = Hello Option LAN Prune Delay,
+P = Hello Option DR Priority, T = Tracking Bit,
+A = Hello Option Join Attribute
+
+Instance: PIM.VRF-C2-HUB
+Interface           IP V Mode        Option       Uptime Neighbor addr
+ge-0/0/8.200         4 2             HPLGT       01:09:47 10.2.1.2       
+```
+
+Ok, now we are ready to forward the multicast traffic. Let's create a stream on our network and some members of the group. 
+```
+
+```
