@@ -1072,7 +1072,7 @@ set policy-options policy-statement export-c2-routers-to-c1 term 1 from route-fi
 set policy-options policy-statement export-c2-routers-to-c1 term 1 then accept
 set policy-options policy-statement export-c2-routers-to-c1 then reject
 
-set routing-options rib-groups leak-c2-routes-to-c1 import-rib [ VRF-C2-SPOKE.inet.0 VRF-C1.inet.0
+set routing-options rib-groups leak-c2-routes-to-c1 import-rib [ VRF-C2-SPOKE.inet.0 VRF-C1.inet.0 ]
 set routing-options rib-groups leak-c2-routes-to-c1 import-policy export-c2-routers-to-c1
 
 set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-3-SPOKE neighbor 10.2.4.2 family inet unicast rib-group leak-c2-routes-to-c1
