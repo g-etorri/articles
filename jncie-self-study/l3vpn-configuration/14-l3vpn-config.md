@@ -591,7 +591,395 @@ VRF-C2-HUB.inet.0: 8 destinations, 11 routes (8 active, 0 holddown, 0 hidden)
 ```
 We are receiving a route with our own AS in the AS-PATH, so the loops are working!!! 
 
-Now, let's make the VRF-SPOKE in the R1 and R2, this still be simple. In the SPOKE PEs will be different. 
+Now, let's make the VRF-SPOKE in the R1 and R2, this still be simple. In the SPOKE PEs that it will be different. 
+R1:
 ```
+set routing-instances VRF-C2-SPOKE instance-type vrf
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE type external
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE description eBGP-CE2-1-SPOKE
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE import deny-all
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE export Saida-CE2-1-SPOKE
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE peer-as 64702
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE as-override
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-1-SPOKE neighbor 10.2.1.6 family inet unicast
+set routing-instances VRF-C2-SPOKE description VRF-C2-SPOKE
+set routing-instances VRF-C2-SPOKE interface ge-0/0/8.201
+set routing-instances VRF-C2-SPOKE interface lo0.2
+set routing-instances VRF-C2-SPOKE route-distinguisher 10.0.0.1:201
+set routing-instances VRF-C2-SPOKE vrf-target target:65020:201
+set routing-instances VRF-C2-SPOKE vrf-table-label
+```
+R2:
+```
+set routing-instances VRF-C2-SPOKE instance-type vrf
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE type external
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE description eBGP-CE2-1-SPOKE
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE import deny-all
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE export Saida-CE2-2-SPOKE
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE peer-as 64702
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE as-override
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-2-SPOKE neighbor 10.2.2.6 family inet unicast
+set routing-instances VRF-C2-SPOKE description VRF-C2-SPOKE
+set routing-instances VRF-C2-SPOKE interface ge-0/0/7.201
+set routing-instances VRF-C2-SPOKE interface lo0.2
+set routing-instances VRF-C2-SPOKE route-distinguisher 10.0.0.2:201
+set routing-instances VRF-C2-SPOKE vrf-target target:65020:201
+set routing-instances VRF-C2-SPOKE vrf-table-label
+```
+In the VRF Spoke we won't receive any route from hub sites, but will export the routes received from spoke sites! 
 
+Here, we don't have any route yet. Let's make the configuration on the spoke PEs and see the magic happening. 
+
+We'll follow the same model in all spoke PEs, so, I'll make the configuration on R7 and we can repeat similarly on the other routers. 
+First, we need to create the RTs as extended comms:
 ```
+set policy-options community target-ce2-hub members target:65020:200
+set policy-options community target-ce2-spoke members target:65020:201
+```
+Then, we can create the import and export policies of the VRF:
+```
+set policy-options policy-statement Entrada-VRF-CE2-SPOKE term 1 from community target-ce2-hub
+set policy-options policy-statement Entrada-VRF-CE2-SPOKE term 1 then accept
+set policy-options policy-statement Entrada-VRF-CE2-SPOKE then reject
+
+set policy-options policy-statement Saida-VRF-CE2-SPOKE term 1 then community add target-ce2-spoke
+set policy-options policy-statement Saida-VRF-CE2-SPOKE term 1 then accept
+set policy-options policy-statement Saida-VRF-CE2-SPOKE then reject
+```
+Basically, we'll receive only the hub site routes, and reject the spoke site routes. This is a classic hub-and-spoke model. 
+
+Now, let's finish the configuration of the routing-instance:
+```
+set routing-instances VRF-C2-SPOKE instance-type vrf
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE type external
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE description eBGP-CE2-SPOKE
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE peer-as 64702
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE as-override
+set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE neighbor 10.2.7.2 family inet unicast
+set routing-instances VRF-C2-SPOKE description VRF-C2-SPOKE
+set routing-instances VRF-C2-SPOKE interface ge-0/0/6.201
+set routing-instances VRF-C2-SPOKE interface lo0.1
+set routing-instances VRF-C2-SPOKE route-distinguisher 10.0.0.7:201
+set routing-instances VRF-C2-SPOKE vrf-import Entrada-VRF-CE2-SPOKE
+set routing-instances VRF-C2-SPOKE vrf-export Saida-VRF-CE2-SPOKE
+set routing-instances VRF-C2-SPOKE vrf-table-label
+```
+Ok, let's replicate this on the other spoke PEs and check the results!!! 
+
+Let's see what we have in our route-table:
+```
+root@R7> show route table VRF-C2-SPOKE.inet.0 active-path 
+
+VRF-C2-SPOKE.inet.0: 14 destinations, 18 routes (14 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 1w0d 12:59:58, localpref 100, from 10.0.0.0
+                      AS path: 64702 65020 I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+                       to 10.200.0.8 via ge-0/0/2.0, label-switched-path Bypass->10.200.0.23
+10.2.0.1/32        *[BGP/170] 1w0d 12:59:58, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+                       to 10.200.0.8 via ge-0/0/2.0, label-switched-path Bypass->10.200.0.23
+10.2.0.2/32        *[BGP/170] 1w0d 12:59:58, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+                       to 10.200.0.8 via ge-0/0/2.0, label-switched-path Bypass->10.200.0.23
+10.2.0.5/32        *[BGP/170] 2w2d 17:34:55, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.7.2 via ge-0/0/6.201
+10.2.1.0/30        *[BGP/170] 1w0d 13:06:54, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+10.2.1.254/32      *[BGP/170] 1w0d 13:06:54, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+10.2.2.0/30        *[BGP/170] 1w0d 13:12:21, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+                       to 10.200.0.8 via ge-0/0/2.0, label-switched-path Bypass->10.200.0.23
+10.2.2.254/32      *[BGP/170] 1w0d 13:12:21, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
+                       to 10.200.0.8 via ge-0/0/2.0, label-switched-path Bypass->10.200.0.23
+10.2.7.0/30        *[Direct/0] 2w2d 17:35:01
+                    >  via ge-0/0/6.201
+10.2.7.1/32        *[Local/0] 2w2d 17:35:01
+                       Local via ge-0/0/6.201
+10.2.7.254/32      *[Direct/0] 2w2d 17:36:04
+                    >  via lo0.1
+```
+We are receiving the routes from hub sites, and the route from the CE2-5. Now, let's check the routes on R1 and R2! 
+```
+root@R1> show route table VRF-C2-HUB.inet.0 
+
+VRF-C2-HUB.inet.0: 8 destinations, 11 routes (8 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 1w0d 13:02:38, localpref 100
+                      AS path: 64702 65020 I, validation-state: unverified
+                    >  to 10.2.1.2 via ge-0/0/8.200
+                    [BGP/170] 1w0d 13:02:21, localpref 100, from 10.0.0.0
+                      AS path: 64702 65020 I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 18
+10.2.0.1/32        *[BGP/170] 1w0d 13:02:38, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.1.2 via ge-0/0/8.200
+                    [BGP/170] 1w0d 13:02:21, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 18
+10.2.0.2/32        *[BGP/170] 1w0d 13:02:38, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.1.2 via ge-0/0/8.200
+                    [BGP/170] 1w0d 13:02:21, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 18
+10.2.1.0/30        *[Direct/0] 2w2d 17:41:05
+                    >  via ge-0/0/8.200 
+10.2.1.1/32        *[Local/0] 2w2d 17:41:05
+                       Local via ge-0/0/8.200
+10.2.1.254/32      *[Direct/0] 2w2d 17:42:41
+                    >  via lo0.1
+10.2.2.0/30        *[BGP/170] 1w0d 13:14:45, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 18
+10.2.2.254/32      *[BGP/170] 1w0d 13:14:45, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 18
+
+root@R1> show route table VRF-C2-SPOKE.inet.0 
+
+VRF-C2-SPOKE.inet.0: 17 destinations, 22 routes (16 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.2.0.3/32        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 19
+10.2.0.4/32        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 19
+10.2.0.5/32        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16, Push 45(top)
+10.2.1.4/30        *[Direct/0] 2w2d 17:40:22
+                    >  via ge-0/0/8.201
+10.2.1.5/32        *[Local/0] 2w2d 17:40:22
+                       Local via ge-0/0/8.201
+10.2.1.253/32      *[Direct/0] 2w2d 17:41:58
+                    >  via lo0.2
+10.2.2.4/30        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 19
+10.2.2.253/32      *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 19
+10.2.4.0/30        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 19
+10.2.4.254/32      *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 19
+10.2.5.0/30        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 19
+10.2.7.0/30        *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16, Push 45(top)
+10.2.7.254/32      *[BGP/170] 1w0d 13:24:12, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16, Push 45(top)
+
+root@R2> show route table VRF-C2-HUB.inet.0 
+
+VRF-C2-HUB.inet.0: 8 destinations, 11 routes (8 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 1w0d 13:02:43, localpref 100
+                      AS path: 64702 65020 I, validation-state: unverified
+                    >  to 10.2.2.2 via ge-0/0/7.200
+                    [BGP/170] 1w0d 13:02:59, localpref 100, from 10.0.0.0
+                      AS path: 64702 65020 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 18
+10.2.0.1/32        *[BGP/170] 1w0d 13:02:43, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.2.2 via ge-0/0/7.200
+                    [BGP/170] 1w0d 13:02:59, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 18
+10.2.0.2/32        *[BGP/170] 1w0d 13:02:43, localpref 100
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.2.2.2 via ge-0/0/7.200
+                    [BGP/170] 1w0d 13:02:59, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 18
+10.2.1.0/30        *[BGP/170] 1w0d 13:09:38, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 18
+10.2.1.254/32      *[BGP/170] 1w0d 13:09:38, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 18
+10.2.2.0/30        *[Direct/0] 2w2d 17:41:20
+                    >  via ge-0/0/7.200
+10.2.2.1/32        *[Local/0] 2w2d 17:41:20
+                       Local via ge-0/0/7.200
+10.2.2.254/32      *[Direct/0] 2w2d 17:42:54
+                    >  via lo0.1
+
+root@R2> show route table VRF-C2-SPOKE.inet.0  
+
+VRF-C2-SPOKE.inet.0: 17 destinations, 22 routes (17 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.2.0.3/32        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19, Push 31(top)
+                       to 10.200.0.7 via ge-0/0/3.0, Push 19, Push 48(top)
+                    [BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+10.2.0.4/32        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19, Push 31(top)
+                       to 10.200.0.7 via ge-0/0/3.0, Push 19, Push 48(top)
+                    [BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+10.2.0.5/32        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+10.2.1.4/30        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19
+10.2.1.253/32      *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19
+10.2.2.4/30        *[Direct/0] 2w2d 17:41:24
+                    >  via ge-0/0/7.201
+10.2.2.5/32        *[Local/0] 2w2d 17:41:24
+                       Local via ge-0/0/7.201
+10.2.2.253/32      *[Direct/0] 2w2d 17:42:58
+                    >  via lo0.2
+10.2.4.0/30        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19, Push 31(top)
+                       to 10.200.0.7 via ge-0/0/3.0, Push 19, Push 48(top)
+                    [BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+10.2.4.254/32      *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19, Push 31(top)
+                       to 10.200.0.7 via ge-0/0/3.0, Push 19, Push 48(top)
+10.2.5.0/30        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                    [BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: 64702 I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, Push 19, Push 31(top)
+                       to 10.200.0.7 via ge-0/0/3.0, Push 19, Push 48(top)
+10.2.5.254/32      *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.9 via ge-0/0/2.0, label-switched-path R2-R5-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R5-A
+10.2.7.0/30        *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+10.2.7.254/32      *[BGP/170] 1w0d 13:25:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.0 via ae0.0, label-switched-path R2-R7-A
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+                       to 10.200.0.7 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.0
+```
+And... everything looks good!!! 
+
+Let's check if we are exporting the spoke routes to hub sites:
+```
+root@R1> show route advertising-protocol bgp 10.2.1.6 
+
+VRF-C2-SPOKE.inet.0: 17 destinations, 22 routes (16 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.2.0.3/32             Self                                    65020 I
+* 10.2.0.4/32             Self                                    65020 I
+* 10.2.0.5/32             Self                                    65020 I
+* 10.2.1.4/30             Self                                    I
+* 10.2.1.253/32           Self                                    I
+* 10.2.2.4/30             Self                                    I
+* 10.2.2.253/32           Self                                    I
+* 10.2.4.0/30             Self                                    I
+* 10.2.4.254/32           Self                                    I
+* 10.2.5.0/30             Self                                    I
+* 10.2.7.0/30             Self                                    I
+* 10.2.7.254/32           Self                                    I
+```
+Now, let's suppose the customer give us a management access on his routers. Let's make some connectivity tests!! 
+```
+[admin@CE2-5] > tool traceroute src-address=10.2.0.5 10.2.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS   LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.2.7.1  0%       2  15.7ms  19.6  15.7  23.4   3.9    
+2  10.2.2.1  0%       2  92.8ms  54.9  17    92.8   37.9   
+3  10.2.2.6  0%       2  15.9ms  15.9  15.9  15.9   0      
+4  10.2.0.1  0%       1  30.2ms  30.2  30.2  30.2   0      
+
+[admin@CE2-5] > tool traceroute src-address=10.2.0.5 10.2.0.2
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS   LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.2.7.1  0%       3  23.1ms  18.1  2.9   28.4   11     
+2  10.2.2.1  0%       3  57.1ms  64.5  57.1  75.8   8.1    
+3  10.2.0.2  0%       3  12.5ms  10.3  6.1   12.5   3      
+
+[admin@CE2-5] > tool traceroute src-address=10.2.0.5 10.2.0.3
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS   LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.2.7.1  0%       2  17.8ms  17.8  17.8  17.8         0
+2  10.2.2.1  0%       1  46.6ms  46.6  46.6  46.6         0
+3  10.2.2.6  0%       1  9.3ms   9.3   9.3   9.3          0
+4  10.2.2.5  0%       1  61.6ms  61.6  61.6  61.6         0
+5  10.2.4.1  0%       1  40ms    40    40    40           0
+6  10.2.0.3  0%       1  53.4ms  53.4  53.4  53.4         0
+
+[admin@CE2-5] > tool traceroute src-address=10.2.0.5 10.2.0.4
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS   LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.2.7.1  0%       2  4.5ms   15.6  4.5   26.7   11.1   
+2  10.2.2.1  0%       2  35.6ms  35.6  35.6  35.6   0      
+3  10.2.2.6  0%       1  30ms    30    30    30     0      
+4  10.2.2.5  0%       1  56ms    56    56    56     0      
+5  10.2.4.1  0%       1  38.5ms  38.5  38.5  38.5   0      
+6  10.2.4.2  0%       1  66.8ms  66.8  66.8  66.8   0      
+7  10.2.0.4  0%       1  32.7ms  32.7  32.7  32.7   0      
+
+[admin@CE2-5] > tool traceroute src-address=10.2.0.5 201.1.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS      LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.2.7.1     0%       3  1.4ms   52.3  1.3   154.3  72.1   
+2  10.2.2.1     0%       3  36.3ms  43.7  8.9   86     31.9   
+3  10.2.2.6     0%       3  28.6ms  16.2  8.5   28.6   8.8    
+4  10.2.2.9     0%       3  14.3ms  17.5  10.5  27.6   7.3    
+5  10.200.0.20  0%       3  18.1ms  41    18.1  80.9   28.3   
+6  201.1.0.1    0%       3  35.9ms  26.5  18.7  35.9   7.1 
+```
+You can see, that we have full connectivity with all sites. And we have internet access also!!! 
+Mission accomplished. 
+
