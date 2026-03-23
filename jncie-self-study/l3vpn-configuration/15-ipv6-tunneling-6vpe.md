@@ -5,7 +5,7 @@ Hello guys! Today, we'll continue to configure the L3VPN services of our network
 You already know the topology. 
 <img width="1146" height="822" alt="image" src="https://github.com/user-attachments/assets/d7e82fbe-fd3a-4abb-872e-a6ff15d2a601" />
 
-In the last article, we didn't configure the Customer 3 VPN. Customer 3 has a different topology, the unique customer to have IPv6! So, this VPN is not inet-vpn, that's a inet6-vpn, or most knownly, 6VPE! 
+In the last article, we didn't configure the Customer 3 VPN. Customer 3 has a different topology, the only customer with IPv6! So, this VPN is not inet-vpn, that's a inet6-vpn, or better known as 6VPE!! 
 
 To prepare our network to run 6VPE, we need to configure this MP-BGP family on the RR and on the PEs:
 ```
@@ -14,7 +14,7 @@ set protocols bgp group iBGP-AS65020-West family inet6-vpn unicast no-install
 set protocols bgp group iBGP-AS65020-East family inet6-vpn unicast nexthop-resolution no-resolution
 set protocols bgp group iBGP-AS65020-East family inet6-vpn unicast no-install
 ```
-Note: If you remember the previous articles, we are using the no-install and no-resolution knobs to be easy as RR out-of-path, this is not a recomendation to use in real cases. 
+Note: If you remember the previous articles, we are using the no-install and no-resolution knobs to simplify the setup for an out-of-path RR, this is not a recomendation to use in real cases. 
 
 Let's check if the sessions are established:
 ```
@@ -77,9 +77,9 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
   bgp.l3vpn.0: 4/4/4/0
   bgp.l3vpn-inet6.0: 0/0/0/0
 ```
-As you can see, only R3 and R8 will speak family inet6-vpn. Ok, I'll say the truth, R3 and R8 already have the VRF configured if they don't have the family would not be shown here. But I omitted the number of routers to make this pleasant for me, hahah. 
+As you can see, only R3 and R8 will speak family inet6-vpn. Ok, to be honest, R3 and R8 already have the VRF configured, otherwise, the family would not be displayed here. I've omitted some output to keep things clean.
 
-The interfaces already are configured and the customer doesn't have any particular requirement, so this service will be simple. With this clarified, let's go the configuration: 
+The interfaces already are configured and the customer doesn't have any particular requirement, so this service will be simple. With that out of the way, let's dive into the configuration: 
 
 First, let's define the routing-instance and configure the BGP session with the customer:
 ```
@@ -96,9 +96,9 @@ set routing-instances VRF-C3 route-distinguisher 10.0.0.8:300
 set routing-instances VRF-C3 vrf-target target:65020:300
 set routing-instances VRF-C3 vrf-table-label
 ```
-Again, we are using the as-override to avoid routes rejected by AS loop. If the 6VPE were equal inet-vpn, with this configuratio the customer could have communication between the sites, but we need a specific knob to 6VPE work. 
+Again, we are using the as-override to avoid routes rejected by AS loop. If the 6VPE were the same as inet-vpn, with this configuratio the customer could have communication between the sites, but we need a specific knob to 6VPE work. 
 
-We need to add the ipv6-tunneling in the MPLS, we already made this before, to use 6PE in our backbone. But I'll show you here, to remember: 
+We need to add the ipv6-tunneling in the MPLS, we already made this before, to use 6PE in our backbone. But I'll show you here, as a reminder: 
 ```
 set protocols mpls ipv6-tunneling
 ```
@@ -163,7 +163,7 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 ```
 And everything is perfect!!! 
 
-I know, this time the text is shameful, so short... I'm sorry, the next article will be MVPN, write about multicast give me goosebumps, I HATE MULTICAST BRO! HELP ME! 
+I know, this time the text is short, so short... I'm sorry, the next article will be MVPN, write about multicast give me goosebumps, I HATE MULTICAST BRO! HELP ME! 
 
 See you soon.
 
