@@ -1118,6 +1118,6 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 ```
 And... everything is ok!!!
 
-You can ask yourself if the Customer 3 configuration is missing. And, I answer... Yes! But the Customer 3 have only IPv6, so, I'll configure this in the next article that I'll write about 6PE.
+You can ask yourself if the Customer 3 configuration is missing. And, I answer... Yes! But the Customer 3 have IPv6, so, I'll configure this in the next article that I'll write about 6PE.
 
 That's all for today. See you soon!!
