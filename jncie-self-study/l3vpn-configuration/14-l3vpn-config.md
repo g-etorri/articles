@@ -1095,6 +1095,18 @@ If you remember the configuration that we made in the internet access configurat
 set policy-options policy-statement Saida-VRF-C1 term 1 from route-filter 10.2.0.0/24 upto /32
 set policy-options policy-statement Saida-VRF-C1 term 1 from route-filter 10.2.4.0/24 upto /32
 ```
+Let's check what we are exporting to the network for the last time: 
+```
+root@R3> ... route advertising-protocol bgp 10.0.0.0 table VRF-C1.inet.0    
+
+VRF-C1.inet.0: 16 destinations, 25 routes (16 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.1.0.2/32             Self                 2       100        I
+* 10.1.0.3/32             Self                 3       100        I
+* 10.1.3.0/30             Self                         100        I
+* 10.1.3.254/32           Self                         100        I
+* 10.1.23.0/30            Self                 2       100        I
+```
 
 Ok, now let's ask to test this connectivity: 
 ```
@@ -1104,7 +1116,7 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 1  10.2.4.1  0%       4  4ms    103.6  1.4   400.8  171.6  
 2  10.1.0.3  0%       4  2.2ms  2      1.8   2.2    0.1    
 ```
-And... Now, everything is ok!!!
+And... everything is ok!!!
 
 You can ask yourself if the Customer 3 configuration is missing. And, I answer... Yes! But the Customer 3 have only IPv6, so, I'll configure this in the next article that I'll write about 6PE.
 
