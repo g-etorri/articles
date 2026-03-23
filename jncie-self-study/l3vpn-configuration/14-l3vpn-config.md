@@ -130,7 +130,7 @@ set interfaces lo0 unit 2 family inet address 10.2.1.253/32
 
 Ok, now I'll explore each customer individually. We have 3 L3VPN customers today
 
-To keep the organization, before all the configuration let's define the RTs and RDs models. I'll use the identificator 100 for Customer 1, 200 for Customer 2 and 300 for Customer 3. For RDs, we'll go with Type 2—the gold standard! And for RTs, we'll use our ASN. 
+To keep things organized, let's define our RT and RD naming conventions before jumping into the config. I'll use the identificator 100 for Customer 1, 200 for Customer 2 and 300 for Customer 3. For RDs, we'll go with Type 2—the gold standard! And for RTs, we'll use our ASN. 
 
 For example, Customer 1 at R8. The RD will be 10.0.0.8:100 and the RT will be target:65020:100, got it? I bet you do.
 
