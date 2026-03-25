@@ -20,25 +20,25 @@ Now, let's follow to the MVPN configuration. With a L3VPN working, we can use th
 
 To start, let me give us a important information. The customer will use the multicast range 239.0.0.0/24. The groups 239.0.0.1 e 239.0.0.2 must be using selective PMSIs, and the others groups inclusive PMSIs, with this, we can follow the road map. 
 
-Do you remember the topology of Customer 2? We have a hub-and-spoke topology, and R1 and R2 are the HUB PEs. In this case, the HUB PEs will act as RP and will be the sender sites. The SPOKE PEs will be the receiver sites. To forward this traffic to the SPOKE PEs, we'll use MLSPs! During the configuration, I'll define some constraints to learn something more. 
+Do you remember the topology of Customer 2? We have a hub-and-spoke topology, and R1 and R2 are the HUB PEs. In this case, the HUB PEs will act as C-RP (Customer`s RP) and will be the sender sites. The SPOKE PEs will be the receiver sites. To forward this traffic to the SPOKE PEs, we'll use MLSPs, or point-to-multipoint LSPs! During the configuration, I'll define some constraints to learn something more. 
 
 Starting, let's configure the MVPN on the HUB routing-instance: 
-* On R1 and R2 we'll use a new loopback address (10.2.0.254), acting as anycast RP. 
+* On R1 and R2 we'll use a new loopback address (10.2.0.254), acting as anycast C-RP. 
 * We need to configure the PIM on PE-CE interface to have communication with the customer, and define the RP address of the group range 239.0.0.0/24 used by the customer. 
 * The MVPN define the MVPN, sure. Here we are defining that our PE will be the sender site and by default, , and we defined different RTs for the MVPN.
 * We created a P2MP template to use as LSPs of our MVPN.
 * Finally, we need to add the chassis configuration to de-encapsulate the PIM messages.
 ```
-set interfaces lo0 unit 1 family inet address 10.2.1.254/32 primary
-set interfaces lo0 unit 1 family inet address 10.2.0.254/32
+set interfaces lo0 unit 2 family inet address 10.2.1.253/32 primary
+set interfaces lo0 unit 2 family inet address 10.2.0.254/32
 
-set routing-instances VRF-C2-HUB protocols pim rp local address 10.2.0.254
-set routing-instances VRF-C2-HUB protocols pim rp local group-ranges 239.0.0.0/24
-set routing-instances VRF-C2-HUB protocols pim interface all
+set routing-instances VRF-C2-SPOKE protocols pim rp local address 10.2.0.254
+set routing-instances VRF-C2-SPOKE protocols pim rp local group-ranges 239.0.0.0/24
+set routing-instances VRF-C2-SPOKE protocols pim interface all
 
-set routing-instances VRF-C2-HUB protocols mvpn sender-site
-set routing-instances VRF-C2-HUB protocols mvpn route-target import-target target target:65020:204
-set routing-instances VRF-C2-HUB protocols mvpn route-target export-target target target:65020:204
+set routing-instances VRF-C2-SPOKE protocols mvpn sender-site
+set routing-instances VRF-C2-SPOKE protocols mvpn route-target import-target target target:65020:204
+set routing-instances VRF-C2-SPOKE protocols mvpn route-target export-target target target:65020:204
 
 set protocols mpls label-switched-path lsp-mcast-p2mp-template template
 set protocols mpls label-switched-path lsp-mcast-p2mp-template p2mp
@@ -47,6 +47,8 @@ set routing-instances VRF-C2-HUB provider-tunnel rsvp-te label-switched-path-tem
 
 set chassis fpc 0 pic 0 tunnel-services
 ```
+Note: Here we are applying the configuration on the VRF-SPOKE, but it doesn't matter, the MVPN will be established with the RTs defined in the protocols mvpn configuration. Another topic, we can use the PIM-SM in our network to signal de PMSIs, but I don't want this here, let's use the BGP and MPLS configured to make this case cleaner. 
+
 This same configuration was applied in R1 and R2. 
 
 In the SPOKE PEs, the configuration will be more simple:
@@ -63,31 +65,31 @@ With this, we can see the Intra-AS I-PMSI routes, or MVPN type 1 routes.
 ```
 root@R1> show route table VRF-C2-HUB.mvpn   
 
-VRF-C2-HUB.mvpn.0: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+VRF-C2-HUB.mvpn.0: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
 + = Active Route, - = Last Active, * = Both
 
 1:10.0.0.1:200:10.0.0.1/240               
-                   *[MVPN/70] 01:02:31, metric2 1
+                   *[MVPN/70] 1d 19:14:44, metric2 1
                        Indirect
 1:10.0.0.2:200:10.0.0.2/240               
-                   *[BGP/170] 00:58:21, localpref 100, from 10.0.0.0
+                   *[BGP/170] 1d 19:10:34, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.1 via ae0.0, Push 0
 1:10.0.0.4:201:10.0.0.4/240               
-                   *[BGP/170] 00:54:24, localpref 100, from 10.0.0.0
+                   *[BGP/170] 1d 19:06:37, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.3 via ge-0/0/2.0, Push 0
 1:10.0.0.5:201:10.0.0.5/240               
-                   *[BGP/170] 00:54:04, localpref 100, from 10.0.0.0
+                   *[BGP/170] 1d 19:06:17, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.1 via ae0.0, Push 10106, Push 10107, Push 10108(top)
                        to 10.200.0.5 via ge-0/0/3.0, Push 10106, Push 10107, Push 10108(top)
 1:10.0.0.7:201:10.0.0.7/240               
-                   *[BGP/170] 00:53:51, localpref 100, from 10.0.0.0
+                   *[BGP/170] 1d 19:06:04, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
-                    >  to 10.200.0.1 via ae0.0, Push 45     
+                    >  to 10.200.0.1 via ae0.0, Push 45
 ```
-Note: The route format of MVPN route type 1 is ROUTE-TYPE:ROUTE-DISTINGUISHER:ORIGIN.
+Note: The route format of MVPN route type 1 is ROUTE-TYPE:ROUTE-DISTINGUISHER:ORIGIN-ROUTER.
 This route is used for autodiscovery of the MVPN. Do you remember the MVPN routes? I don't. 
 
 I'll give you a table with the routes:
@@ -96,7 +98,7 @@ I'll give you a table with the routes:
 | - | - | - | - |
 | Type 1 | Intra-AS I-PMSI | All PEs | Used for MVPN autodiscovery |
 | Type 2 | Inter-AS I-PMSI | ASBRs | Used in Inter-AS VPNs scenario, Option B or C |
-| Type 3 | S-PMSI AD | Sender PE | Used to create a selective tunnel |
+| Type 3 | S-PMSI AD | Sender PE | Used to create a selective tunnel for a particular group |
 | Type 4 | Leaf AD | Receiver PE | Used to respond the route type 3, to build a selective tree |
 | Type 5 | Source Active | Sender PE | Used to inform the PEs that the source started the stream |
 | Type 6 | Shared Tree Join | Receiver PE | Used to join a shared tree, in other words, to receive the stream from RP |
@@ -106,7 +108,7 @@ This table will facilitate our understanding about MVPN.
 
 Now, checking our MVPN instance, we can see the members:
 ```
-root@R1> show mvpn instance all 
+root@R1> show mvpn instance 
 
 MVPN instance:
 Legend for neighbor state (St)
@@ -132,11 +134,11 @@ Instance : VRF-C2-HUB
   10.0.0.2                              
   10.0.0.4              
   10.0.0.5              
-  10.0.0.7              
+  10.0.0.7                        
 ```
 And, we can see the PIM neighbor of the instance:
 ```
-root@R1> show pim neighbors instance all 
+root@R1> show pim neighbors instance VRF-C2-HUB 
 B = Bidirectional Capable, G = Generation Identifier
 H = Hello Option Holdtime, L = Hello Option LAN Prune Delay,
 P = Hello Option DR Priority, T = Tracking Bit,
@@ -144,7 +146,7 @@ A = Hello Option Join Attribute
 
 Instance: PIM.VRF-C2-HUB
 Interface           IP V Mode        Option       Uptime Neighbor addr
-ge-0/0/8.200         4 2             HPLGT       01:09:47 10.2.1.2       
+ge-0/0/8.200         4 2             HPLGT    1d 19:02:08 10.2.1.2          
 ```
 
 Ok, now we are ready to forward the multicast traffic. Let's create a stream on our network and some members of the group. 
