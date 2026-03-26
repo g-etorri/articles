@@ -88,8 +88,27 @@ VRF-C2-HUB.mvpn.0: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
                    *[BGP/170] 1d 19:06:04, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.1 via ae0.0, Push 45
+....
+VRF-C2-HUB.mvpn.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
+1:10.0.0.1:200:10.0.0.1/240 (1 entry, 1 announced)
+        *MVPN   Preference: 70
+                PMSI: Flags 0x0: Label 0: RSVP-TE: Session_13[10.0.0.1:0:60993:10.0.0.1]
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x8099f14
+                Next-hop reference count: 9
+                Kernel Table Id: 0
+                Protocol next hop: 10.0.0.1
+                Indirect next hop: 0x0 - INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Active Int Ext>
+                Age: 22:41:48   Metric2: 1 
+                Validation State: unverified 
+                Task: mvpn global task
+                Announcement bits (3): 0-PIM.VRF-C2-HUB 1-mvpn global task 2-rt-export 
+                AS path: I 
+                Thread: junos-main 
 ```
-Note: The route format of MVPN route type 1 is ROUTE-TYPE:ROUTE-DISTINGUISHER:ORIGIN-ROUTER.
+Note: The route format of MVPN route type 1 is ROUTE-TYPE:ROUTE-DISTINGUISHER:ORIGIN-ROUTER. In this route, will contain the PMSI type used, in our case is RSVP-TE. 
 This route is used for autodiscovery of the MVPN. Do you remember the MVPN routes? I don't. 
 
 I'll give you a table with the routes:
@@ -149,7 +168,199 @@ Interface           IP V Mode        Option       Uptime Neighbor addr
 ge-0/0/8.200         4 2             HPLGT    1d 19:02:08 10.2.1.2          
 ```
 
-Ok, now we are ready to forward the multicast traffic. Let's create a stream on our network and some members of the group. 
+Ok, now we are ready to forward the multicast traffic. Let's create a stream on our network and some members of the group. I'll use a tool of Mikrotik, where I can create a traffic flow of a determinated packet, in other words, I can create a multicast stream here. 
+```
+[admin@CE2-1] /tool/traffic-generator> packet-template/print 
+ 0 name="multicast" header-stack=mac,ip,udp interface=vlan200 assumed-mac-src=50:C2:E7:00:1F:00 
+   assumed-mac-dst=FF:FF:FF:FF:FF:FF assumed-mac-protocol=ip assumed-ip-dscp=0 assumed-ip-id=0 assumed-ip-frag-off=0 
+   assumed-ip-ttl=64 ip-dst=239.0.0.1 assumed-ip-src=10.2.1.2 assumed-ip-protocol=udp assumed-udp-src-port=100 
+   assumed-udp-dst-port=200 assumed-udp-checksum=0 data=uninitialized data-byte=0 random-byte-offsets-and-masks="" 
+   random-ranges="" special-footer=yes compute-checksum-from-offset=no-checksum
+
+[admin@CE2-1] /tool/traffic-generator> quick tx-template=multicast mbps=1 
+Columns: SEQ, ID, TX-PACKET, TX-RATE, RX-PACKET, RX-RATE, RX-OOO, RX-BAD-CSUM, LOST-PACKET, LOST-RATE, LOST-RATIO
+SEQ  ID  TX-PACKET  TX-RATE     RX-PACKET  RX-RATE  RX-OOO  RX-BAD-CSUM  LOST-PACKET  LOST-RATE   LOST-RATIO
+1     0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
+2     0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
+TOT   0        166  1005.2kbps          0  0bps          0            0          166  1005.2kbps   100.000% 
+```
+When the stream is started, the R1 will create a route type 5, to advertise that a stream has started here, let's see the route below: 
+```
+root@R1> show route table VRF-C2-HUB.mvpn.0 match-prefix 5:* extensive  
+
+VRF-C2-HUB.mvpn.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
+5:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1/240 (1 entry, 1 announced)
+        *PIM    Preference: 105
+                Next hop type: Multicast (IPv4) Composite, Next hop index: 0
+                Address: 0x6fd9350
+                Next-hop reference count: 7
+                Kernel Table Id: 0
+                State: <Active Int>
+                Age: 2:18:28 
+                Validation State: unverified 
+                Task: PIM.VRF-C2-HUB
+                Announcement bits (3): 0-PIM.VRF-C2-HUB 1-mvpn global task 2-rt-export 
+                AS path: I 
+                Communities: mvpn-sa-rp:10.2.0.254:0
+                Thread: junos-main 
+```
+You can see the route inform us, the route type, router-id, the source of the stream and the receiver group. In other words, R1 is receiving a multicast stream from 10.2.1.2 to 239.0.0.1! 
+
+Now, let's include a IGMP client here. Our receiver-sites will receive a IGMP join and translate this into route type 7, and advertise this to our MVPN. With this route received by R1, the traffic will be forwarded to the PE receiver. Let's check this. 
+
+In the CE2-3, I created a manual GMP join, in the group 239.0.0.1 to stream with source 10.2.1.2. 
+```
+/routing gmp
+add disabled=no groups=239.0.0.1 interfaces=vlan201 sources=10.2.1.2
+```
+R4 will receive this join:
+```
+root@R4> show igmp group 239.0.0.1 detail 
+Interface: ge-0/0/9.201, Groups: 3
+    Group: 239.0.0.1
+        Group mode: Include
+        Source: 10.2.1.2
+        Source timeout: 173
+        Last reported by: 10.2.4.2
+        Group timeout:       0 Type: Dynamic
+        Output interface: ge-0/0/9.201
+```
+As the interface speaks PIM, this will be a PIM join also:
+```
+root@R4> show pim join instance VRF-C2-SPOKE extensive 
+Instance: PIM.VRF-C2-SPOKE Family: INET
+R = Rendezvous Point Tree, S = Sparse, W = Wildcard
+
+Group: 239.0.0.1
+    Source: 10.2.1.2
+    Flags: sparse,spt
+    Upstream protocol: BGP
+    Upstream interface: Through BGP           
+    Upstream neighbor: Through MVPN
+    Upstream state: Join to Source
+    Keepalive timeout: 51
+    Uptime: 01:47:39 
+    Downstream neighbors:
+        Interface: ge-0/0/9.201           
+            10.2.4.1 State: Join Flags: S   Timeout: Infinity
+            Uptime: 01:39:49 Time since last Join: 01:39:49
+            10.2.4.2 State: Join Flags: S Timeout: 171
+            Uptime: 01:47:39 Time since last Join: 00:00:39
+    Number of downstream interfaces: 1
+    Number of downstream neighbors: 2
+```
+This PIM join will be translated into route type 7 of MVPN, this route basically informs to the MVPN that R4 are interested into receive this stream: 
+```
+root@R4> show route table VRF-C2-SPOKE.mvpn.0 match-prefix 7:* extensive 
+
+VRF-C2-SPOKE.mvpn.0: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
+7:10.0.0.1:200:65020:32:10.2.1.2:32:239.0.0.1/240 (1 entry, 1 announced)
+        *PIM    Preference: 105
+                Next hop type: Multicast (IPv4) Composite, Next hop index: 1048575
+                Address: 0x91b0324
+                Next-hop reference count: 4
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Age: 7  Metric: 0 
+                Validation State: unverified 
+                Task: PIM.VRF-C2-SPOKE
+                Announcement bits (3): 0-PIM.VRF-C2-SPOKE 1-mvpn global task 2-rt-export 
+                AS path: I 
+                Communities: target:10.0.0.1:9
+                Thread: junos-main 
+```
+You can note the RT target:10.0.0.1:9, this is a dynamic RT created by Junos when we add the protocols mvpn into the routing-instance. All the routes will have this RT, including the inet-vpn prefixes. 
+
+When R1 receives this route, a new PIM join is created, and the downstream interface will be the MVPN neighbors interested in receive this traffic. 
+```
+root@R1> show pim join instance VRF-C2-HUB extensive                      
+Instance: PIM.VRF-C2-HUB Family: INET
+R = Rendezvous Point Tree, S = Sparse, W = Wildcard
+
+Group: 239.0.0.1
+    Source: 10.2.1.2
+    Flags: sparse,spt
+    Upstream interface: ge-0/0/8.200          
+    Upstream neighbor: Direct
+    Upstream state: Local Source, Local RP
+    Keepalive timeout: 227
+    Uptime: 00:02:13 
+    Downstream neighbors:
+        Interface: Pseudo-MVPN            
+            Uptime: 00:02:12 Time since last Join: 00:02:12
+    Number of downstream interfaces: 1
+    Number of downstream neighbors: 1
+```
+Let's check if the traffic are arriving into receiver-sites:
+```
+[admin@CE2-3] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         82
+           rx-bits-per-second:  993.1kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          1
+           tx-bits-per-second:    2.7kbps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
+...
+[admin@CE2-4] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         80
+           rx-bits-per-second:  968.9kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          0
+           tx-bits-per-second:       0bps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
+...
+[admin@CE2-5] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         82
+           rx-bits-per-second:  981.5kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          0
+           tx-bits-per-second:       0bps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
+```
+And... it's ok! Our MVPN is working perfectly. 
+
+But, let's add some constraints here. I'll start another stream to the group 239.0.0.2, but in this case we'll create a selective PMSI, in other words, this PMSI will be used for a specific group and source. 
+
+I'll limit the number of PMSIs that can be signalled in 2, and I'll create another template to apply some TE constraints in this LSP. 
+```
+set routing-instances VRF-C2-HUB provider-tunnel selective tunnel-limit 2
+set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.2/32 source 10.2.0.0/16 rsvp-te label-switched-path-template lsp-mcast-selec-p2mp-template
+set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.2/32 source 10.2.0.0/16 threshold-rate 100000
+
+et protocols mpls label-switched-path lsp-mcast-selec-p2mp-template template
+set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template bandwidth 60m
+set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template priority 5 5
+set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template hop-limit 5
+set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template link-protection
+set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template p2mp
+```
+Our LSP will signal 60Mbps of BW, will have a priority value of 5, link-protection desired and can have a limit of 5 hops! 
+
+Now, let's check the results: 
 ```
 
 ```
+
+I configured the MVPN before configure the PIM in all our network to show you the scale of the MVPN. We don't need the PIM running in all the network, we can run PIM only in the PE-CE interfaces, and the BGP scales perfectly! 
+
