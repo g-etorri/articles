@@ -643,6 +643,8 @@ Now, let's check the traffic into CEs:
     tx-queue-drops-per-second:          0
          tx-errors-per-second:          0
 ```
+Now, we finished our MVPN configuration!!! 
+
 
 I configured the MVPN before configure the PIM in all our network to show you the scale of the MVPN. We don't need the PIM running in all the network, we can run PIM only in the PE-CE interfaces, and the BGP scales perfectly! 
 
