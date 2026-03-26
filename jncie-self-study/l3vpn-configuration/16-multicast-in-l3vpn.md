@@ -41,6 +41,10 @@ set routing-instances VRF-C2-SPOKE protocols mvpn route-target import-target tar
 set routing-instances VRF-C2-SPOKE protocols mvpn route-target export-target target target:65020:204
 
 set protocols mpls label-switched-path lsp-mcast-p2mp-template template
+set protocols mpls label-switched-path lsp-mcast-p2mp-template bandwidth 10
+set protocols mpls label-switched-path lsp-mcast-p2mp-template priority 5 5
+set protocols mpls label-switched-path lsp-mcast-p2mp-template hop-limit 5
+set protocols mpls label-switched-path lsp-mcast-p2mp-template link-protection
 set protocols mpls label-switched-path lsp-mcast-p2mp-template p2mp
 
 set routing-instances VRF-C2-HUB provider-tunnel rsvp-te label-switched-path-template lsp-mcast-p2mp-template
@@ -48,6 +52,8 @@ set routing-instances VRF-C2-HUB provider-tunnel rsvp-te label-switched-path-tem
 set chassis fpc 0 pic 0 tunnel-services
 ```
 Note: Here we are applying the configuration on the VRF-SPOKE, but it doesn't matter, the MVPN will be established with the RTs defined in the protocols mvpn configuration. Another topic, we can use the PIM-SM in our network to signal de PMSIs, but I don't want this here, let's use the BGP and MPLS configured to make this case cleaner. 
+
+I applied some TE constraints into LSP template to make the things funny, 10M of BW because we'll have a selective PMSI configured later to forward the surplus traffic. 
 
 This same configuration was applied in R1 and R2. 
 
@@ -342,11 +348,11 @@ And... it's ok! Our MVPN is working perfectly.
 
 But, let's add some constraints here. I'll start another stream to the group 239.0.0.2, but in this case we'll create a selective PMSI, in other words, this PMSI will be used for a specific group and source. 
 
-I'll limit the number of PMSIs that can be signalled in 2, and I'll create another template to apply some TE constraints in this LSP. 
+I'll limit the number of PMSIs that can be signalled in 4, and I'll create another template and apply some TE constraints in this LSP. 
 ```
-set routing-instances VRF-C2-HUB provider-tunnel selective tunnel-limit 2
-set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.2/32 source 10.2.0.0/16 rsvp-te label-switched-path-template lsp-mcast-selec-p2mp-template
-set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.2/32 source 10.2.0.0/16 threshold-rate 100000
+set routing-instances VRF-C2-HUB provider-tunnel selective tunnel-limit 4
+set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.1/32 source 10.2.0.0/16 rsvp-te label-switched-path-template lsp-mcast-selec-p2mp-template
+set routing-instances VRF-C2-HUB provider-tunnel selective group 239.0.0.1/32 source 10.2.0.0/16 threshold-rate 500
 
 et protocols mpls label-switched-path lsp-mcast-selec-p2mp-template template
 set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template bandwidth 60m
@@ -355,11 +361,287 @@ set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template hop-limit 5
 set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template link-protection
 set protocols mpls label-switched-path lsp-mcast-selec-p2mp-template p2mp
 ```
-Our LSP will signal 60Mbps of BW, will have a priority value of 5, link-protection desired and can have a limit of 5 hops! 
+Our LSP will signal 60Mbps of BW, will have a priority value of 5, link-protection desired and can have a limit of 5 hops, like the template of inclusive PMSI. 
+The selective PMSI will be signalled when the multicast stream exceed the threshold defined, that is 500kbps. When the traffic exceed this, the sender PE will advertise a route type 3, and the receiver PE will advertise a route type 4 as a responde, with this, the selective tree will be build and the selective PMSI will be signalled. 
 
-Now, let's check the results: 
+Now, let's check the results.
+
+I'm still sending the stream with 1Mbps 
+```
+[admin@CE2-1] /tool/traffic-generator> quick tx-template=multicast mbps=1
+Columns: SEQ, ID, TX-PACKET, TX-RATE, RX-PACKET, RX-RATE, RX-OOO, RX-BAD-CSUM, LOST-PACKET, LOST-RATE, LOST-RATIO
+SEQ  ID  TX-PACKET  TX-RATE     RX-PACKET  RX-RATE  RX-OOO  RX-BAD-CSUM  LOST-PACKET  LOST-RATE   LOST-RATIO
+149   0         82  993.1kbps           0  0bps          0            0           82  993.1kbps    100.000% 
+150   0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
+151   0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
+```
+This traffic is sufficient to trigger the creation of the selective tree, so, by the logic, I'll have the route type 3 created and advertised to the MVPN. 
+```
+root@R1> show route table bgp.mvpn.0 match-prefix 3:* extensive    
+
+bgp.mvpn.0: 11 destinations, 12 routes (11 active, 0 holddown, 0 hidden)
+3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1/240 (1 entry, 1 announced)
+TSI:
+Page 0 idx 0, (group iBGP-AS65020-West type Internal) Type 1 val 0x1ca4f4e0 (adv_entry)
+   Advertised metrics:
+     Flags: Nexthop Change
+     Nexthop: Self
+     Localpref: 100
+     AS path: [65020] I
+     Communities: target:65020:204
+     PMSI: Flags 0x1: Label 0: RSVP-TE: Session_13[10.0.0.1:0:60994:10.0.0.1]
+    Advertise: 00000001
+Path 3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1
+Vector len 4.  Val: 0
+        *MVPN   Preference: 70
+                PMSI: Flags 0x1: Label 0: RSVP-TE: Session_13[10.0.0.1:0:60994:10.0.0.1]
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x8099f14
+                Next-hop reference count: 11
+                Kernel Table Id: 0
+                Protocol next hop: 10.0.0.1
+                Indirect next hop: 0x0 - INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Secondary Active Int Ext>
+                Age: 3:22       Metric2: 1 
+                Validation State: unverified 
+                Task: mvpn global task
+                Announcement bits (1): 1-BGP_RT_Background 
+                AS path: I 
+                Communities: target:65020:204
+                Primary Routing Table: VRF-C2-HUB.mvpn.0
+                Thread: junos-main
+...
+root@R1> ...protocol bgp 10.0.0.0 table bgp.mvpn.0 detail                   
+
+bgp.mvpn.0: 11 destinations, 12 routes (11 active, 0 holddown, 0 hidden)
+* 1:10.0.0.1:200:10.0.0.1/240 (1 entry, 1 announced)
+ BGP group iBGP-AS65020-West type Internal
+     Route Distinguisher: 10.0.0.1:200
+     Nexthop: Self
+     Flags: Nexthop Change
+     Localpref: 100
+     AS path: [65020] I 
+     Communities: target:65020:204
+
+* 3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1/240 (1 entry, 1 announced)
+ BGP group iBGP-AS65020-West type Internal
+     Route Distinguisher: 10.0.0.1:200
+     Nexthop: Self
+     Flags: Nexthop Change
+     Localpref: 100
+     AS path: [65020] I 
+     Communities: target:65020:204
+```
+Note: Here you can see in the flags and in the tunnel identifier the difference. In the PMSI advertised into route type 1, we have the flags 0x0, here we have another flags 0x1, and the identifier was 10.0.0.1:0:60993:10.0.0.1, now is 10.0.0.1:0:60994:10.0.0.1. 
+
+With this route advertised, we should receive the routes type 4 of the receiver PEs, let's check:
+```
+root@R1> show route table bgp.mvpn.0 match-prefix 4:* extensive             
+
+bgp.mvpn.0: 11 destinations, 12 routes (11 active, 0 holddown, 0 hidden)
+4:3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1:10.0.0.4/240 (1 entry, 0 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x80aba14
+                Next-hop reference count: 4
+                Kernel Table Id: 0
+                Source: 10.0.0.0
+                Protocol next hop: 10.0.0.4
+                Indirect next hop: 0x2 no-forward INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Active Int Ext>
+                Local AS: 65020 Peer AS: 65020
+                Age: 6:54       Metric2: 10 
+                Validation State: unverified 
+                Task: BGP_65020.10.0.0.0
+                AS path: I  (Originator)
+                Cluster list:  0.0.0.2
+                Originator ID: 10.0.0.4
+                Communities: target:10.0.0.1:0
+                Import Accepted
+                Localpref: 100          
+                Router ID: 10.0.0.0
+                Secondary Tables: VRF-C2-HUB.mvpn.0
+                Thread: junos-main 
+                Indirect next hops: 1
+                        Protocol next hop: 10.0.0.4 Metric: 10 ResolvState: Resolved
+                        Indirect next hop: 0x2 no-forward INH Session ID: 0
+                        Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                        Indirect path forwarding next hops: 1
+                                Next hop type: Router
+                                Next hop: 10.200.0.3 via ge-0/0/2.0 weight 0x1
+                                Session Id: 0
+                                10.0.0.4/32 Originating RIB: inet.3
+                                  Metric: 10 Node path count: 1
+                                  Forwarding nexthops: 1
+                                        Next hop type: Router
+                                        Next hop: 10.200.0.3 via ge-0/0/2.0 weight 0x1
+                                        Session Id: 0
+
+4:3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1:10.0.0.5/240 (1 entry, 0 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x809f094
+                Next-hop reference count: 4
+                Kernel Table Id: 0
+                Source: 10.0.0.0
+                Protocol next hop: 10.0.0.5
+                Indirect next hop: 0x2 no-forward INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Active Int Ext>
+                Local AS: 65020 Peer AS: 65020
+                Age: 6:54       Metric2: 16777224 
+                Validation State: unverified 
+                Task: BGP_65020.10.0.0.0
+                AS path: I  (Originator)
+                Cluster list:  0.0.0.2
+                Originator ID: 10.0.0.5
+                Communities: target:10.0.0.1:0
+                Import Accepted
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Secondary Tables: VRF-C2-HUB.mvpn.0
+                Thread: junos-main 
+                Indirect next hops: 1
+                        Protocol next hop: 10.0.0.5 Metric: 16777224 ResolvState: Resolved
+                        Indirect next hop: 0x2 no-forward INH Session ID: 0
+                        Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                        Indirect path forwarding next hops: 2
+                                Next hop type: Router
+                                Next hop: 10.200.0.1 via ae0.0 weight 0x1
+                                Session Id: 0
+                                Next hop: 10.200.0.5 via ge-0/0/3.0 weight 0xf000
+                                Session Id: 0
+                                10.0.0.5/32 Originating RIB: inet.3
+                                  Metric: 16777224 Node path count: 1
+                                  Indirect next hops: 1
+                                Protocol next hop: 10108 Metric: 16777219 ResolvState: Resolved
+                                Inode flags: 0x202284 path flags: 0x0
+                                Path fnh link: 0x1c93eee0 path inh link: 0x8449800
+                                Label operation: Push 10106, Push 10107(top)
+                                Label TTL action: no-prop-ttl, no-prop-ttl(top)
+                                Load balance label: Label 10106: None; Label 10107: None; 
+                                Indirect next hop: 0x80e8fd0 - INH Session ID: 0 Weight 0x1
+                                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                                Indirect path forwarding next hops: 2
+                                        Next hop type: Router
+                                        Next hop: 10.200.0.1 via ae0.0 weight 0x1
+                                        Session Id: 0
+                                        Next hop: 10.200.0.5 via ge-0/0/3.0 weight 0xf000
+                                        Session Id: 0
+                                        10108 /52 Originating RIB: mpls.0
+                                          Metric: 16777219 Node path count: 1
+                                          Forwarding nexthops: 2
+                                                Next hop type: Router
+                                                Next hop: 10.200.0.1 via ae0.0 weight 0x1
+                                                Session Id: 0
+                                                Next hop: 10.200.0.5 via ge-0/0/3.0 weight 0xf000
+                                                Session Id: 0
+
+4:3:10.0.0.1:200:32:10.2.1.2:32:239.0.0.1:10.0.0.1:10.0.0.7/240 (1 entry, 0 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x1cce5814
+                Next-hop reference count: 4
+                Kernel Table Id: 0
+                Source: 10.0.0.0
+                Protocol next hop: 10.0.0.7
+                Indirect next hop: 0x2 no-forward INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Active Int Ext>
+                Local AS: 65020 Peer AS: 65020
+                Age: 6:54       Metric2: 16777219 
+                Validation State: unverified 
+                Task: BGP_65020.10.0.0.0
+                AS path: I  (Originator)
+                Cluster list:  0.0.0.1
+                Originator ID: 10.0.0.7
+                Communities: target:10.0.0.1:0
+                Import Accepted
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Secondary Tables: VRF-C2-HUB.mvpn.0
+                Thread: junos-main 
+                Indirect next hops: 1
+                        Protocol next hop: 10.0.0.7 Metric: 16777219 ResolvState: Resolved
+                        Indirect next hop: 0x2 no-forward INH Session ID: 0
+                        Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                        Indirect path forwarding next hops: 1
+                                Next hop type: Router
+                                Next hop: 10.200.0.1 via ae0.0 weight 0x1
+                                Session Id: 0
+                                10.0.0.7/32 Originating RIB: inet.3
+                                  Metric: 16777219 Node path count: 1
+                                  Forwarding nexthops: 1
+                                        Next hop type: Router
+                                        Next hop: 10.200.0.1 via ae0.0 weight 0x1
+                                        Session Id: 0
+```
+Here, we can see all the receivers!!! Now, our selective tree is created with success. 
+
+The selective PMSI LSP is created:
+```
+root@R1> show mpls lsp 
+Ingress LSP: 9 sessions
+To              From            State Rt P     ActivePath       LSPname
+10.0.0.2        10.0.0.1        Dn     0       -                10.0.0.2:10.0.0.1:200:mvpn:VRF-C2-HUB
+10.0.0.4        10.0.0.1        Up     0 *                      10.0.0.4:10.0.0.1:200:mv1:VRF-C2-HUB
+10.0.0.4        10.0.0.1        Up     0 *                      10.0.0.4:10.0.0.1:200:mvpn:VRF-C2-HUB
+10.0.0.5        10.0.0.1        Up     0 *                      10.0.0.5:10.0.0.1:200:mv1:VRF-C2-HUB
+10.0.0.5        10.0.0.1        Up     0 *                      10.0.0.5:10.0.0.1:200:mvpn:VRF-C2-HUB
+10.0.0.7        10.0.0.1        Up     0 *                      10.0.0.7:10.0.0.1:200:mv1:VRF-C2-HUB
+10.0.0.7        10.0.0.1        Up     0 *                      10.0.0.7:10.0.0.1:200:mvpn:VRF-C2-HUB
+10.0.0.6        10.0.0.1        Up     0 *     primary          R1-R6-A
+10.0.0.8        10.0.0.1        Up     0 *     primary          R1-R8-A
 ```
 
+Now, let's check the traffic into CEs: 
+```
+[admin@CE2-3] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         82
+           rx-bits-per-second:  993.1kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          1
+           tx-bits-per-second:    2.7kbps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
+....
+[admin@CE2-4] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         81
+           rx-bits-per-second:  981.0kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          0
+           tx-bits-per-second:       0bps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
+....
+[admin@CE2-5] > interface/monitor-traffic aggregate 
+        rx-packets-per-second:         83
+           rx-bits-per-second:  982.2kbps
+     fp-rx-packets-per-second:          0
+        fp-rx-bits-per-second:       0bps
+          rx-drops-per-second:          0
+         rx-errors-per-second:          0
+        tx-packets-per-second:          1
+           tx-bits-per-second:     528bps
+     fp-tx-packets-per-second:          0
+        fp-tx-bits-per-second:       0bps
+          tx-drops-per-second:          0
+    tx-queue-drops-per-second:          0
+         tx-errors-per-second:          0
 ```
 
 I configured the MVPN before configure the PIM in all our network to show you the scale of the MVPN. We don't need the PIM running in all the network, we can run PIM only in the PE-CE interfaces, and the BGP scales perfectly! 
