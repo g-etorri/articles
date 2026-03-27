@@ -18,30 +18,24 @@ We can apply the same logic on the other routers.
 
 Now, let's follow to the MVPN configuration. With a L3VPN working, we can use the same routing-instance to roll out the MVPN. 
 
-To start, let me give us a important information. The customer will use the multicast range 239.0.0.0/24. The groups 239.0.0.1 e 239.0.0.2 must be using selective PMSIs, and the others groups inclusive PMSIs, with this, we can follow the road map. 
+To start, let me give us a important information. The customer will use the multicast range 239.0.0.0/24. The group used here is 239.0.0.1. 
 
 Do you remember the topology of Customer 2? We have a hub-and-spoke topology, and R1 and R2 are the HUB PEs. In this case, the HUB PEs will act as C-RP (Customer`s RP) and will be the sender sites. The SPOKE PEs will be the receiver sites. To forward this traffic to the SPOKE PEs, we'll use MLSPs, or point-to-multipoint LSPs! During the configuration, I'll define some constraints to learn something more. 
 
 Starting, let's configure the MVPN on the HUB routing-instance: 
-* On R1 and R2 we'll use a new loopback address (10.2.0.254), acting as anycast C-RP. 
-* We need to configure the PIM on PE-CE interface to have communication with the customer, and define the RP address of the group range 239.0.0.0/24 used by the customer. 
-* The MVPN define the MVPN, sure. Here we are defining that our PE will be the sender site and by default, , and we defined different RTs for the MVPN.
+* We need to configure the PIM on PE-CE interface to have communication with the customer.
+* The MVPN define the MVPN, sure. Here we are defining that our PE will be the sender site and by default the MVPN will work as spt-only, in other words, enables PEs to establish Shortest Path Trees (SPTs) directly between source and receiver sites, avoiding intermediate RPs across the core, and we defined different RTs for the MVPN.
 * We created a P2MP template to use as LSPs of our MVPN.
 * Finally, we need to add the chassis configuration to de-encapsulate the PIM messages.
 ```
-set interfaces lo0 unit 2 family inet address 10.2.1.253/32 primary
-set interfaces lo0 unit 2 family inet address 10.2.0.254/32
+set routing-instances VRF-C2-HUB protocols pim interface all
 
-set routing-instances VRF-C2-SPOKE protocols pim rp local address 10.2.0.254
-set routing-instances VRF-C2-SPOKE protocols pim rp local group-ranges 239.0.0.0/24
-set routing-instances VRF-C2-SPOKE protocols pim interface all
-
-set routing-instances VRF-C2-SPOKE protocols mvpn sender-site
-set routing-instances VRF-C2-SPOKE protocols mvpn route-target import-target target target:65020:204
-set routing-instances VRF-C2-SPOKE protocols mvpn route-target export-target target target:65020:204
+set routing-instances VRF-C2-HUB protocols mvpn sender-site
+set routing-instances VRF-C2-HUB protocols mvpn route-target import-target target target:65020:204
+set routing-instances VRF-C2-HUB protocols mvpn route-target export-target target target:65020:204
 
 set protocols mpls label-switched-path lsp-mcast-p2mp-template template
-set protocols mpls label-switched-path lsp-mcast-p2mp-template bandwidth 10
+set protocols mpls label-switched-path lsp-mcast-p2mp-template bandwidth 500k
 set protocols mpls label-switched-path lsp-mcast-p2mp-template priority 5 5
 set protocols mpls label-switched-path lsp-mcast-p2mp-template hop-limit 5
 set protocols mpls label-switched-path lsp-mcast-p2mp-template link-protection
@@ -51,9 +45,9 @@ set routing-instances VRF-C2-HUB provider-tunnel rsvp-te label-switched-path-tem
 
 set chassis fpc 0 pic 0 tunnel-services
 ```
-Note: Here we are applying the configuration on the VRF-SPOKE, but it doesn't matter, the MVPN will be established with the RTs defined in the protocols mvpn configuration. Another topic, we can use the PIM-SM in our network to signal de PMSIs, but I don't want this here, let's use the BGP and MPLS configured to make this case cleaner. 
+Note: Here we are applying the configuration on the VRF-HUB, but it doesn't matter, the MVPN will be established with the RTs defined in the protocols mvpn configuration. Another topic, we can use the PIM-SM in our network to signal de PMSIs, but I don't want this here, let's use the BGP and MPLS configured to make this case cleaner. 
 
-I applied some TE constraints into LSP template to make the things funny, 10M of BW because we'll have a selective PMSI configured later to forward the surplus traffic. 
+I applied some TE constraints into LSP template to make the things funny, 500Kbps of BW because we'll have a selective PMSI configured later to forward the surplus traffic. 
 
 This same configuration was applied in R1 and R2. 
 
@@ -212,7 +206,7 @@ VRF-C2-HUB.mvpn.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
 ```
 You can see the route inform us, the route type, router-id, the source of the stream and the receiver group. In other words, R1 is receiving a multicast stream from 10.2.1.2 to 239.0.0.1! 
 
-Now, let's include a IGMP client here. Our receiver-sites will receive a IGMP join and translate this into route type 7, and advertise this to our MVPN. With this route received by R1, the traffic will be forwarded to the PE receiver. Let's check this. 
+Now, let's include a IGMP client here. Our receiver-sites will receive a IGMP join and create a PIM join, that will be translated this into route type 7, and advertise this to our MVPN. With this route received by R1, the traffic will be forwarded to the PE receiver. Let's check this. 
 
 In the CE2-3, I created a manual GMP join, in the group 239.0.0.1 to stream with source 10.2.1.2. 
 ```
@@ -375,7 +369,7 @@ SEQ  ID  TX-PACKET  TX-RATE     RX-PACKET  RX-RATE  RX-OOO  RX-BAD-CSUM  LOST-PA
 150   0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
 151   0         83  1005.2kbps          0  0bps          0            0           83  1005.2kbps   100.000% 
 ```
-This traffic is sufficient to trigger the creation of the selective tree, so, by the logic, I'll have the route type 3 created and advertised to the MVPN. 
+This traffic is enough to trigger the creation of the selective tree, so, by the logic, I'll have the route type 3 created and advertised to the MVPN. 
 ```
 root@R1> show route table bgp.mvpn.0 match-prefix 3:* extensive    
 
@@ -645,6 +639,73 @@ Now, let's check the traffic into CEs:
 ```
 Now, we finished our MVPN configuration!!! 
 
-
 I configured the MVPN before configure the PIM in all our network to show you the scale of the MVPN. We don't need the PIM running in all the network, we can run PIM only in the PE-CE interfaces, and the BGP scales perfectly! 
 
+Finally, to finish this topic about multicast, I'll simulate a scenario wheres the multicast is configured in the core network, to delivery a IPTV service for example. In this case, I wanna have two possible RPs, but the RP will be elected via bootstrap. 
+
+First, let's configure the PIM in all core interfaces, here I'm configuring the R1, and we can apply the same logic in the other routers. 
+```
+set protocols pim interface ae0.0
+set protocols pim interface ge-0/0/2.0
+set protocols pim interface ge-0/0/3.0
+set protocols pim interface lo0.0
+```
+
+Let's check the PIM neighbors here: 
+```
+root@R1> show pim neighbors
+B = Bidirectional Capable, G = Generation Identifier
+H = Hello Option Holdtime, L = Hello Option LAN Prune Delay,
+P = Hello Option DR Priority, T = Tracking Bit,
+A = Hello Option Join Attribute
+
+Instance: PIM.master
+Interface           IP V Mode        Option       Uptime Neighbor addr
+ae0.0                4 2             HPLGTA      00:07:16 10.200.0.1
+ge-0/0/2.0           4 2             HPLGTA      00:06:49 10.200.0.3
+ge-0/0/3.0           4 2             HPLGTA      00:05:44 10.200.0.5
+ae0.0                6 2             HPLGTA      00:07:16 fe80::2e6b:f5ff:fe89:bdc0
+ge-0/0/3.0           6 2             HPLGTA      00:05:44 fe80::528b:d8ff:fe00:1205
+```
+
+Now, let's configure the RPs with the bootstrap priority defined, in this case the R1 will have a best value than R2, this way R2 will be the backup RP. Note that here we have a anycast address. 
+R1:
+```
+set interfaces lo0 unit 0 family inet address 10.0.0.254/32
+set protocols pim rp bootstrap family inet priority 200
+set protocols pim rp local family inet address 10.0.0.254
+set protocols pim rp local family inet anycast-pim rp-set address 10.0.0.2
+set protocols pim rp local family inet anycast-pim local-address 10.0.0.1
+```
+R2:
+```
+set interfaces lo0 unit 0 family inet address 10.0.0.254/32
+set protocols pim rp bootstrap family inet priority 100
+set protocols pim rp local family inet address 10.0.0.254
+set protocols pim rp local family inet anycast-pim rp-set address 10.0.0.1
+set protocols pim rp local family inet anycast-pim local-address 10.0.0.2
+```
+Let's check the results of election now: 
+```
+root@R1> show pim bootstrap
+Instance: PIM.master
+
+BSR                     Pri Local address           Pri State       Timeout
+10.0.0.1                200 10.0.0.1                200 Elected          28
+None                      0 fd10:faca:f0fa::1         0 InEligible Infinity
+root@R2> show pim bootstrap
+Instance: PIM.master
+
+BSR                     Pri Local address           Pri State       Timeout
+10.0.0.1                200 10.0.0.2                100 Candidate       116
+None                      0 fd10:faca:f0fa::2         0 InEligible Infinity
+```
+Here we can see that R1 is elected, and R2 is candidate. If R1 fails, R2 will be our RP! 
+
+In this case, I don't have any multicast stream to simulate in our network, I'm sorry to let you down this time. 
+
+This is all. I'll admit to you that I started write this, disliking multicast, but to make the whole thing work I break the walls. First, in the MVPN I was creating the GMP join with the source-specific, but the Junos didn't understand the source field, this is because Junos by default speaks IGMPv2, with this, the PE was creating the route type 7, but with the community no-advertise, and obviously, didn't advertise this route to the sender-site. Changing this to IGMPv3, then the PE was identifying the source field of the IGMP join, then the PE create the route correctly, and the stream can be forwarded to the CEs. 
+
+If the sender-site won't receive any route type 7, it discards the traffic received from CE silently, and only forwards the stream if haves a route type 7 in the RIB. 
+
+That's all folks, this topic makes me tired. The next chapter I'll explore the L2VPNs!!! See you later. 
