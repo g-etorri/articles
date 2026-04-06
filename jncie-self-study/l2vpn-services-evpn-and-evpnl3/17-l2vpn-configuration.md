@@ -297,12 +297,35 @@ root@R7> show route table L2VPN-CE5-S1.
 
 L2VPN-CE5-S1.l2vpn.0: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
 + = Active Route, - = Last Active, * = Both
-
-10.0.0.3:5:2:1/96
-                   *[BGP/170] 00:08:46, localpref 100, from 10.0.0.0
-                      AS path: I, validation-state: unverified
-                    >  to 10.200.0.23 via ge-0/0/4.0, label-switched-path R7-R2-A
-                       to 10.200.0.20 via ge-0/0/3.0, label-switched-path Bypass->10.200.0.23
+...................
+ 10.0.0.3:5:2:1/96 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.3:5
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x80b1d94
+                Next-hop reference count: 12
+                Kernel Table Id: 0
+                Source: 10.0.0.0
+                Protocol next hop: 10.0.0.3
+                Indirect next hop: 0x2 no-forward INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Secondary Active Int Ext>
+                Local AS: 65020 Peer AS: 65020
+                Age: 21:11      Metric2: 1
+                Validation State: unverified
+                Task: BGP_65020.10.0.0.0
+                Announcement bits (1): 0-L2VPN-CE5-S1-l2vpn
+                AS path: I  (Originator)
+                Cluster list:  0.0.0.2
+                Originator ID: 10.0.0.3
+                Communities: target:65020:5 Layer2-info: encaps: VLAN, control flags:[0x2] Control-Word, mtu: 1500, site preference: 100
+                Import Accepted
+                Label-base: 25, range: 4, status-vector: 0x0, offset: 1
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Primary Routing Table: bgp.l2vpn.0
+                Thread: junos-main
+...................
 10.0.0.5:5:3:1/96
                    *[BGP/170] 00:08:46, localpref 100, from 10.0.0.0
                       AS path: I, validation-state: unverified
@@ -341,7 +364,7 @@ L2VPN-CE5-S1.l2id.0: 4 destinations, 8 routes (4 active, 0 holddown, 0 hidden)
                        to 10.200.0.23 via ge-0/0/4.0, Push 89
 
 ```
-In the routing tables, we can see all L2VPN routes. The structure of the route is basically ```router-id:site-id:label-block/96```. When a router receive the route of the remote PE, it knows how to forward the traffic, and what label use to forward this VPN traffic. Sure, here all the things is simplificated to the operator see that. 
+In the routing tables, we can see all L2VPN routes. The structure of the route is basically ```router-id:site-id:label-block/96```. When a router receive the route of the remote PE, it knows how to forward the traffic, and what label use to forward this VPN traffic. Sure, here all the things is simplificated to the operator see that, but, basically, when the route is received with a RT of some routing-instance, these routes is injected into the ```L2VPN.l2id.0``` table. And the sites are identified accordingly. 
 
 With all the routes received, we can check the circuit status: 
 ```
