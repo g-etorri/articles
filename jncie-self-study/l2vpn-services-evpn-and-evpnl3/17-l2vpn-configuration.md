@@ -341,7 +341,7 @@ L2VPN-CE5-S1.l2id.0: 4 destinations, 8 routes (4 active, 0 holddown, 0 hidden)
                        to 10.200.0.23 via ge-0/0/4.0, Push 89
 
 ```
-In the routing tables, we can see all L2VPN routes. The structure of the route is basically router-id:site-id:label-block/96. When a router receive the route of the remote PE, it knows how to forward the traffic, and what label use to forward this VPN traffic. Sure, here all the things is simplificated to the operator see that. 
+In the routing tables, we can see all L2VPN routes. The structure of the route is basically ```router-id:site-id:label-block/96```. When a router receive the route of the remote PE, it knows how to forward the traffic, and what label use to forward this VPN traffic. Sure, here all the things is simplificated to the operator see that. 
 
 With all the routes received, we can check the circuit status: 
 ```
