@@ -416,6 +416,477 @@ Here we have the Site 5 with connection with the other sites in the network:
 ```
 And, mission accomplished here! Customer 5 with an excellent service. 
 
+Now, let's to the VPLS Martini! Here the configuration is simple and objective, like L2CKTs. 
 
+I'm applying the configuration on R1, but we'll follow the same logic in the other PEs. Again, let the multihomed site without configuration to avoid loops.
+```
+set interfaces ge-0/0/9 description to-CE6-1
+set interfaces ge-0/0/9 flexible-vlan-tagging
+set interfaces ge-0/0/9 encapsulation flexible-ethernet-services
+set interfaces ge-0/0/9 unit 600 encapsulation vlan-vpls
+set interfaces ge-0/0/9 unit 600 vlan-id 600
+set interfaces ge-0/0/9 unit 601 encapsulation vlan-vpls
+set interfaces ge-0/0/9 unit 601 vlan-id 601
 
-INTERLIGAR O L2CKT DO CLIENTE C5 com o VPLS
+set routing-instances VPLS-CE6 instance-type vpls
+set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.6
+set routing-instances VPLS-CE6 protocols vpls encapsulation-type ethernet-vlan
+set routing-instances VPLS-CE6 protocols vpls no-tunnel-services
+set routing-instances VPLS-CE6 protocols vpls vpls-id 6
+set routing-instances VPLS-CE6 protocols vpls mtu 1500
+set routing-instances VPLS-CE6 protocols vpls flow-label-transmit
+set routing-instances VPLS-CE6 protocols vpls flow-label-receive
+set routing-instances VPLS-CE6 description VPLS-CE6
+set routing-instances VPLS-CE6 vlan-id all
+set routing-instances VPLS-CE6 interface ge-0/0/9.600
+set routing-instances VPLS-CE6 interface ge-0/0/9.601
+```
+Here we need to define the same parameters that we have in the L2CKT, encapsulation, MTU and vpls-id needs to match, if not the VPLS will not be UP. I added the flow-label into the circuit to improve the load-balance of the traffic, is only a good practice. In the same logic of the VPLS Kompella, we'll use the vlan-aware mode of the VPLS, mantaining the broadcast domains separated. 
+
+Ok, with the configuration maded in the R1 and R6, let's check the outputs: 
+```
+root@R1> show vpls connections
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+ RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch           HS -- Hot-standby Connection
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: VPLS-CE6
+  VPLS-id: 6
+    Neighbor                  Type  St     Time last up          # Up trans
+    10.0.0.6(vpls-id 6)       rmt   Up     Mar  6 15:12:06 2026           1
+      Remote PE: 10.0.0.6, Negotiated control-word: No
+      Incoming label: 26, Outgoing label: 17
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048576, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.6 vpls-id 6
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+    10.0.0.8(vpls-id 6)       rmt   OL
+    10.0.0.7(vpls-id 6)       rmt   OL
+```
+Here we have the pseudowire to R6 established. Let's look at the LDP FEC 128 message now: 
+```
+root@R1> show ldp database session 10.0.0.6 l2circuit detail
+Input label database, 10.0.0.1:0--10.0.0.6:0
+Labels received: 11
+  Label     Prefix
+     17      L2CKT NoCtrlWord VLAN VC 6
+            MTU: 1500 Flow Label T Bit: 1 Flow Label R Bit: 1
+            State: Active
+            Age: 4w4d 20:45:46
+            VCCV Control Channel types:
+                MPLS router alert label
+                MPLS PW label with TTL=1
+            VCCV Control Verification types:
+                LSP ping
+                BFD with IP/UDP-encapsulation for Fault Detection
+
+Output label database, 10.0.0.1:0--10.0.0.6:0
+Labels advertised: 10
+  Label     Prefix
+     26      L2CKT NoCtrlWord VLAN VC 6
+            MTU: 1500 Flow Label T Bit: 1 Flow Label R Bit: 1
+            State: Active
+            Age: 4w4d 20:45:47
+            VCCV Control Channel types:
+                MPLS router alert label
+                MPLS PW label with TTL=1
+            VCCV Control Verification types:
+                LSP ping
+                BFD with IP/UDP-encapsulation for Fault Detection
+```
+In the LDP messages we can see the all the parameters, including MTU, flow-label bits, MTU, vpls-id/virtual-circuit-id and encapsulation. This is fantastic!!! 
+
+Now, let's go to the multihomed site. 
+
+To mantain only one traffic forwarder in the VPLS, we need to establish the pseudowire to one router. I choose the R8, so on the R1 and R6 let's add the configuration: 
+```
+set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.8 revert-time 30
+set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.8 backup-neighbor 10.0.0.7 standby
+```
+This way, the pseudowire to R8 and R7 will be established, but the pseudowire for R7 will be used only if the R8 pseudowire fails. The revert-time will revert the traffic to use to R8 pseudowire again after it goes up in X seconds, here is defined in 30 seconds. 
+
+In R8 and R7, let's configure the VPLS, but to avoid loops, we can't configure a pseudowire between then. 
+```
+set routing-instances VPLS-CE6 instance-type vpls
+set routing-instances VPLS-CE6 protocols vpls interface-mac-limit 20
+set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.1
+set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.6
+set routing-instances VPLS-CE6 protocols vpls encapsulation-type ethernet-vlan
+set routing-instances VPLS-CE6 protocols vpls no-tunnel-services
+set routing-instances VPLS-CE6 protocols vpls vpls-id 6
+set routing-instances VPLS-CE6 protocols vpls mtu 1500
+set routing-instances VPLS-CE6 protocols vpls flow-label-transmit
+set routing-instances VPLS-CE6 protocols vpls flow-label-receive
+set routing-instances VPLS-CE6 description VPLS-CE6
+set routing-instances VPLS-CE6 vlan-id all
+set routing-instances VPLS-CE6 interface ge-0/0/8.600
+set routing-instances VPLS-CE6 interface ge-0/0/8.601
+```
+With this, let's check the status on R1:
+```
+root@R1> show vpls connections
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch           HS -- Hot-standby Connection
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: VPLS-CE6
+  VPLS-id: 6
+    Neighbor                  Type  St     Time last up          # Up trans
+    10.0.0.6(vpls-id 6)       rmt   Up     Mar  6 15:12:06 2026           1
+      Remote PE: 10.0.0.6, Negotiated control-word: No
+      Incoming label: 26, Outgoing label: 17
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048576, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.6 vpls-id 6
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+    10.0.0.8(vpls-id 6)       rmt   Up     Apr  8 12:06:58 2026           1
+      Remote PE: 10.0.0.8, Negotiated control-word: No
+      Incoming label: 24, Outgoing label: 134
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048580, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.8 vpls-id 6
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+    10.0.0.7(vpls-id 6)       rmt   ST
+```
+You can see here, R8's pseudowire is UP, and R7's pseudowire is with the ST flag, as Standby Connection. 
+
+If you go look into R7, you can see the pseudowires established to R1 and R6. This is what the ```stanby``` knob do. The pseudowire is up but not in use. 
+```
+root@R7> show vpls connections
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch           HS -- Hot-standby Connection
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: VPLS-CE6
+  VPLS-id: 6
+    Neighbor                  Type  St     Time last up          # Up trans
+    10.0.0.1(vpls-id 6)       rmt   Up     Apr  8 12:06:47 2026           1
+      Remote PE: 10.0.0.1, Negotiated control-word: No
+      Incoming label: 41, Outgoing label: 25
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048832, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.1 vpls-id 6
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+    10.0.0.6(vpls-id 6)       rmt   Up     Apr  8 12:06:47 2026           1
+      Remote PE: 10.0.0.6, Negotiated control-word: No
+      Incoming label: 42, Outgoing label: 19
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048833, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.6 vpls-id 6
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+```
+With this, theoritically the R7 will not learn any MAC address from remote PEs: 
+```
+root@R7> show vpls mac-table
+
+MAC flags       (S -static MAC, D -dynamic MAC, L -locally learned, C -Control MAC
+    O -OVSDB MAC, SE -Statistics enabled, NM -Non configured MAC, R -Remote PE MAC, P -Pinned MAC)
+
+Routing instance : VPLS-CE6
+ Bridging domain : __VPLS-CE6__, VLAN : 600
+   MAC                 MAC      GBP     Logical          NH     MAC         active
+   address             flags    Tag     interface        Index  property    source
+   50:05:8f:00:33:00   D                ge-0/0/8.600
+   50:32:6d:00:38:00   D                ge-0/0/8.600
+   50:fc:a2:00:20:00   D                ge-0/0/8.600
+
+MAC flags       (S -static MAC, D -dynamic MAC, L -locally learned, C -Control MAC
+    O -OVSDB MAC, SE -Statistics enabled, NM -Non configured MAC, R -Remote PE MAC, P -Pinned MAC)
+
+Routing instance : VPLS-CE6
+ Bridging domain : __VPLS-CE6__, VLAN : 601
+   MAC                 MAC      GBP     Logical          NH     MAC         active
+   address             flags    Tag     interface        Index  property    source
+   50:05:8f:00:33:00   D                ge-0/0/8.601
+   50:32:6d:00:38:00   D                ge-0/0/8.601
+   50:fc:a2:00:20:00   D                ge-0/0/8.601
+```
+Different than VPLS Kompella, we don't have any signalling between the multihomed PEs to identify a multihomed site, then the R7 is learning the MAC addresses of local-interface. 
+
+Now, in R8 we have the mac-table complete: 
+```
+root@R8> show vpls mac-table
+
+MAC flags       (S -static MAC, D -dynamic MAC, L -locally learned, C -Control MAC
+    O -OVSDB MAC, SE -Statistics enabled, NM -Non configured MAC, R -Remote PE MAC, P -Pinned MAC)
+
+Routing instance : VPLS-CE6
+ Bridging domain : __VPLS-CE6__, VLAN : 600
+   MAC                 MAC      GBP     Logical          NH     MAC         active
+   address             flags    Tag     interface        Index  property    source
+   50:05:8f:00:33:00   D                lsi.1048833
+   50:32:6d:00:38:01   D                ge-0/0/5.600
+   50:fc:a2:00:20:00   D                lsi.1048832
+
+MAC flags       (S -static MAC, D -dynamic MAC, L -locally learned, C -Control MAC
+    O -OVSDB MAC, SE -Statistics enabled, NM -Non configured MAC, R -Remote PE MAC, P -Pinned MAC)
+
+Routing instance : VPLS-CE6
+ Bridging domain : __VPLS-CE6__, VLAN : 601
+   MAC                 MAC      GBP     Logical          NH     MAC         active
+   address             flags    Tag     interface        Index  property    source
+   50:05:8f:00:33:00   D                lsi.1048833
+   50:32:6d:00:38:01   D                ge-0/0/5.601
+   50:fc:a2:00:20:00   D                lsi.1048832
+```
+Ok, now let's apply some constraints here, I don't want that this customer have more than 20 MAC addresses on the mac-table, I'll limit this and drop the packets if the customer tresspass the limit: 
+
+Let's apply this in all PEs:
+```
+set routing-instances VPLS-CE6 protocols vpls mac-table-size 20
+set routing-instances VPLS-CE6 protocols vpls mac-table-size packet-action drop
+set routing-instances VPLS-CE6 protocols vpls interface-mac-limit 20
+```
+In case of some problem in the customer LAN, we'll avoid some overload in our network. 
+
+Let's ask the customer some tests to confirm if the service is complete: 
+```
+[admin@CE6-1] > ping 172.60.0.2
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.60.0.2                                 56  64 49ms856us
+    1 172.60.0.2                                 56  64 21ms605us
+    2 172.60.0.2                                 56  64 12ms477us
+    sent=3 received=3 packet-loss=0% min-rtt=12ms477us avg-rtt=27ms979us max-rtt=49ms856us
+
+[admin@CE6-1] > ping 172.60.0.3
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.60.0.3                                 56  64 28ms6us
+    1 172.60.0.3                                 56  64 6ms309us
+    2 172.60.0.3                                 56  64 15ms477us
+    sent=3 received=3 packet-loss=0% min-rtt=6ms309us avg-rtt=16ms597us max-rtt=28ms6us
+```
+Everything looks good!!!
+
+Now, the Customer 5 is calling me...
+
+He wants to connect his Site 1, that haves VPWS into VPLS! Ok man, let's do it. 
+
+At R7, let's add another VLAN to this connection, and create a new pseudowire into L2CKT: 
+```
+set interfaces ge-0/0/7 unit 500 description S1-VPLS
+set interfaces ge-0/0/7 unit 500 encapsulation vlan-ccc
+set interfaces ge-0/0/7 unit 500 vlan-id 500
+set routing-instances L2VPN-CE5-S1 protocols l2vpn site s1 interface ge-0/0/7.500 remote-site-id 10
+set routing-instances L2VPN-CE5-S1 interface ge-0/0/7.500
+```
+This way, we'll transport all the traffic of the VLAN 500 to the Site 10, Site 10 don't exist, is only a ficitcious site that we'll create on R3 to interconnect the services. 
+
+In R3, we need to create two units on the logical-tunnel interface. An unit to include into VPWS, and another one to include into VPLS, both with the VLAN 500 configured, but with different encapsulation to work properly into VPLS and VPWS. 
+```
+set interfaces lt-0/0/0 unit 0 encapsulation vlan-ccc
+set interfaces lt-0/0/0 unit 0 vlan-id 500
+set interfaces lt-0/0/0 unit 0 peer-unit 1
+set interfaces lt-0/0/0 unit 1 encapsulation vlan-vpls
+set interfaces lt-0/0/0 unit 1 vlan-id 500
+set interfaces lt-0/0/0 unit 1 peer-unit 0
+
+set routing-instances L2VPN-CE5-2 protocols l2vpn site s10 interface lt-0/0/0.1 remote-site-id 1
+set routing-instances L2VPN-CE5-2 protocols l2vpn site s10 site-identifier 10
+set routing-instances L2VPN-CE5-2 protocols l2vpn site s10 mtu 1500
+set routing-instances L2VPN-CE5-2 interface lt-0/0/0.1
+
+set routing-instances VPLS-CE5 protocols vpls site s10 interface lt-0/0/0.1
+set routing-instances VPLS-CE5 protocols vpls site s10 site-identifier 10
+set routing-instances VPLS-CE5 interface lt-0/0/0.1
+```
+Into L2VPN, let's add our Site 10 and the connection to the Site 1, and on the VPLS let's add another site including the lt interface also. 
+
+Now, the traffic of the Site 1 that comes from VLAN 500, will go to the R3, and in R3 will be forwarded trough lt-0/0/0.0 to lt-0/0/0.1, then forwarded to the VPLS! And the opposite occurs too. You got it? It's easy, come on. 
+
+Enjoying this new requirement, I'll add limits on the VPLS also. I
+
+I'll limit the mac-learning of the VPLS in 16 addresses:
+```
+set routing-instances VPLS-CE5 protocols vpls mac-table-size 16
+set routing-instances VPLS-CE5 protocols vpls interface-mac-limit 16
+```
+But this time, I won't drop the packets. 
+
+Let's ask the customer if Site 1 have connection with the VPLS sites:
+```
+[admin@CE5-1] > ping 172.50.0.4
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.0.4                                 56  64 61ms722us
+    1 172.50.0.4                                 56  64 51ms805us
+    2 172.50.0.4                                 56  64 20ms892us
+    sent=3 received=3 packet-loss=0% min-rtt=20ms892us avg-rtt=44ms806us
+   max-rtt=61ms722us
+
+[admin@CE5-1] > ping 172.50.0.5
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.0.5                                 56  64 66ms469us
+    1 172.50.0.5                                 56  64 26ms139us
+    2 172.50.0.5                                 56  64 10ms183us
+    sent=3 received=3 packet-loss=0% min-rtt=10ms183us avg-rtt=34ms263us
+   max-rtt=66ms469us
+
+[admin@CE5-1] > ping 172.50.0.6
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.0.6                                 56  64 56ms565us
+    1 172.50.0.6                                 56  64 20ms47us
+    2 172.50.0.6                                 56  64 46ms428us
+    sent=3 received=3 packet-loss=0% min-rtt=20ms47us avg-rtt=41ms13us
+   max-rtt=56ms565us
+
+[admin@CE5-1] > ip arp pr
+Flags: D, P - PUBLISHED; C - COMPLETE
+Columns: ADDRESS, MAC-ADDRESS, INTERFACE
+#    ADDRESS     MAC-ADDRESS        INTERFACE
+0 DC 172.5.12.2  50:E3:AC:00:24:00  vlan512
+1 DC 172.5.13.3  50:5D:ED:00:31:00  vlan513
+2 DC 172.50.0.6  50:D6:06:00:32:00  vlan500
+3 DC 172.50.0.5  50:66:CC:00:2B:00  vlan500
+4 DC 172.50.0.4  50:9D:8C:00:25:00  vlan500
+```
+Everything is ok!!! 
+
+All our goals is accomplished here, I will add a bonus here. Do you remember that I commented in the previous article about LDP FEC 128? VPLS Martini and L2CKT uses the same message, we can establish a pseudowire between two routers using VPLS at one side, and VPWS in the other side. I'll show you an example, we can define this as H-VPLS, like a hub-and spoke topology. 
+
+At R1 we'll have a VPLS configured, and on R5 and R6 we'll have L2CKT. 
+R1:
+```
+set interfaces ge-0/0/9 unit 610 encapsulation vlan-vpls
+set interfaces ge-0/0/9 unit 610 vlan-id 610
+
+set routing-instances H-VPLS-Example instance-type vpls
+set routing-instances H-VPLS-Example protocols vpls neighbor 10.0.0.6
+set routing-instances H-VPLS-Example protocols vpls neighbor 10.0.0.5
+set routing-instances H-VPLS-Example protocols vpls encapsulation-type ethernet-vlan
+set routing-instances H-VPLS-Example protocols vpls no-tunnel-services
+set routing-instances H-VPLS-Example protocols vpls vpls-id 610
+set routing-instances H-VPLS-Example protocols vpls mtu 1500
+set routing-instances H-VPLS-Example protocols vpls flow-label-transmit
+set routing-instances H-VPLS-Example protocols vpls flow-label-receive
+set routing-instances H-VPLS-Example description H-VPLS-Example
+set routing-instances H-VPLS-Example vlan-id 610 
+set routing-instances H-VPLS-Example interface ge-0/0/9.610
+```
+R5 and R6:
+```
+set interfaces ge-0/0/9 unit 610 encapsulation vlan-ccc
+set interfaces ge-0/0/9 unit 610 vlan-id 610
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 virtual-circuit-id 610
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 description L2CKT-610
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 flow-label-transmit
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 flow-label-receive
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 mtu 1500
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 encapsulation-type ethernet-vlan
+set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 no-vlan-id-validate
+```
+
+Now, on R1 we have the pseudowires established correctly:
+```
+root@R1> show vpls connections instance H-VPLS-Example
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch           HS -- Hot-standby Connection
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: H-VPLS-Example
+  VPLS-id: 610
+    Neighbor                  Type  St     Time last up          # Up trans
+    10.0.0.5(vpls-id 610)     rmt   VC-Dn  -----                          0
+      Remote PE: 10.0.0.5, Negotiated control-word: No
+      Incoming label: 145, Outgoing label: 149
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048593, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls H-VPLS-Example neighbor 10.0.0.5 vpls-id 610
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+    10.0.0.6(vpls-id 610)     rmt   Up     Apr  8 12:36:22 2026           1
+      Remote PE: 10.0.0.6, Negotiated control-word: No
+      Incoming label: 146, Outgoing label: 117
+      Negotiated PW status TLV: No
+      Local interface: lsi.1048592, Status: Up, Encapsulation: VLAN
+        Description: Intf - vpls H-VPLS-Example neighbor 10.0.0.6 vpls-id 610
+      Flow Label Transmit: Yes, Flow Label Receive: Yes
+```
+This is naturally a hub-and-spoke topology, R5 and R6 can't communicate this way, we can add a mesh-group including the two pseudowires and enabling the local-switch to change the default behavior. 
+
+That's all folks!!! The next time I'll write about EVPN, an exciting topic!!! See you next. 
