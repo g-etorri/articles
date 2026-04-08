@@ -6,7 +6,7 @@ The topology that we'll follow is here:
 <img width="987" height="821" alt="image" src="https://github.com/user-attachments/assets/f2aaab60-af94-4b3d-bb83-14d5921f2366" />
 
 First of all, let's clarify all the circuits:
-| Cliente | Site | Router | Sinalização | Interface para o CE | VLAN    | Conexão      | PE  |
+| Customer | Site | Router | Protocol | PE-CE Interface | VLAN    | Circuit | PE  |
 | ------- | ---- | ------ | ----------- | ------------------- | ------- | ------------ | --- |
 | C4      | S1   | CE4-1  | LDP         | ge-0/0/7            | 412,413 | S1-S2, S1-S3 | R1  |
 | C4      | S2   | CE4-2  | LDP         | ge-0/0/7            | 412,423 | S1-S3, S2-S3 | R8  |
