@@ -235,9 +235,11 @@ To avoid this, R2 could simply not forward the traffic to R1, but if R1 haves an
 
 To avoid this scenario, the remote PEs will use the aliasing-label instead of the normal label of EVPN, with this label the PE2 even without the MAC address learned, will forward the traffic to the ESI, making the load-balance of the traffic without loss any packet. 
 
+In the backup-paths process that happens when we have a single-active ESI, the remote PEs will install the routes for the secondary PEs as backup in the FIB, then, when the remote PEs receive the withdrawal of the AD Per-ESI, this backup routes will become active. 
+
 You got the type 1 routes? Both kind of routes will work together, to discovery wath EVIs we have in the ESI and how forward the traffic in the right manner. 
 
-In the output, first we have the AD Per-ESI, and so on the AD Per-EVI. 
+In the output, first we have the AD Per-ESI with the ```ROUTE-TYPE:RD::ESI```, you can notice the esi-label community and the RT of EVI in the ESI, that identifies if we have an active-active or single-active ESI. And so on the AD Per-EVI with the ```ROUTE-TYPE:RD::ESI```, and we can notice the RT of the EVI and the aliasing label advertised.  
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 1:* detail
 ....
@@ -337,7 +339,9 @@ root@R1> show route table EVPN-CE12.evpn.0 match-prefix 2:* detail
                 Thread: junos-main
 ....
 ```
-EVPN routes type 3: Called Inclusive Multicast Ethernet Tag Route, this route is used to build a inclusive tree to forward not only multicast traffic, but broadcast and unknown unicast also, like a MVPN, indeed, this technique was copied of MVPNs! Hahahah, nothing is created, everything is tranformed. In the route below we can see almost all characteristics that we have in route type 2, but we have the router-id of the remote PE instead of MAC/IP. In the details of the route we can see the PMSI and the label that will be used to forward the BUM traffic, this is the most important information. 
+EVPN routes type 3: Called Inclusive Multicast Ethernet Tag Route, this route is used to build a inclusive tree to forward not only multicast traffic, but broadcast and unknown unicast also, like a MVPN, indeed, this technique was copied of MVPNs! Hahahah, nothing is created, everything is tranformed. 
+
+In the route below we can see almost all characteristics that we have in route type 2, but we have the router-id of the remote PE instead of MAC/IP. In the details of the route we can see the PMSI and the label that will be used to forward the BUM traffic, this is the most important information. 
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 3:* detail
 ....
@@ -374,7 +378,10 @@ root@R1> show route table EVPN-CE12.evpn.0 match-prefix 3:* detail
 
 And, we have a hidden EVPN route present in our topology, that are route type 4!!! 
 
-EVPN routes type 4: Called Ethernet Segment Routes, this route is used to PEs discover the other PEs connected in the same ESI and to avoid loops in one way, I'm saying in one way because we have two kinds of loop that can happen here, the loop where the BUM traffic is forwarded by a remote CE, and the loop where the BUM traffic was forwarded by the local CE. The route type 4 prevent the loop where the BUM traffic is forwarded into EVPN by a remote CE, this route is used to have a DF election, where the two PEs will decide what PE can forward the BUM traffic, yes, only one PE can forward the BUM traffic trough the ESI, preventing loops. This election is exclusive of an ESI, if the PE have other CEs in the same EVI, it can forward the BUM traffic for them normally, the process of election happens trough a calculation defined in the RFC 7432, and it's not important right now, but with this both PEs will have the same result, and only one will be the DF. 
+EVPN routes type 4: Called Ethernet Segment Routes, this route is used to PEs discover the other PEs connected in the same ESI and to avoid loops in one way, I'm saying in one way because we have two kinds of loop that can happen here, the loop where the BUM traffic is forwarded by a remote CE, and the loop where the BUM traffic was forwarded by the local CE. 
+
+The route type 4 prevent the loop where the BUM traffic is forwarded into EVPN by a remote CE, this route is used to have a DF election, where the two PEs will decide what PE can forward the BUM traffic, yes, only one PE can forward the BUM traffic trough the ESI, preventing loops. This election is exclusive of an ESI, if the PE have other CEs in the same EVI, it can forward the BUM traffic for them normally, the process of election happens trough a calculation defined in the RFC 7432, and it's not important right now, but with this both PEs will have the same result, and only one will be the DF.
+
 The route format is ```ROUTE-TYPE:RD::ESI:PE``` and basically, this route is used mainly to discover the PEs in the same ESI, or identify the ESI and his PEs in the network. This is the content of the route after all. R1 receives the route from R2 with the same ESI, and now it knows that R2 is connected into ESI 01, then the DF election happens. For the other PEs, they will know that R1 and R2 are connected into this ESI, indeed the MAC/IP routes have the ESI as next-hop. 
 ```
 root@R1> show route table bgp.evpn.0 match-prefix 4:* detail
@@ -425,11 +432,35 @@ bgp.evpn.0: 22 destinations, 22 routes (22 active, 0 holddown, 0 hidden)
                 Secondary Tables: __default_evpn__.evpn.0
                 Thread: junos-main
 ```
-We can see who is the DF of the ESI on the instance output, with some details of when was the last DF election: 
+
+
+Now, verifying the EVI, we can see all a lot of details, the VLAN used, the MAC database stats, the number of bridge domains, the neigbors of EVI, the ESIs in the EVI and the PEs connected in the ESI also, DF PE, aliasing label, split-horizon label and so on...   
 ```
 root@R1> show evpn instance extensive
 Instance: EVPN-CE12
-....
+  Route Distinguisher: 10.0.0.1:1234
+  VLAN ID: 1234
+  Per-instance MAC route label: 16
+  Duplicate MAC detection threshold: 5
+  Duplicate MAC detection window: 180
+  MAC database status                     Local  Remote
+    MAC advertisements:                       1       3
+    MAC+IP advertisements:                    0       0
+    Default gateway MAC advertisements:       0       0
+  Number of local interfaces: 2 (2 up)
+    Interface name  ESI                            Mode             Status     AC-Role
+    .local..6       00:00:00:00:00:00:00:00:00:00  single-homed     Up         Root
+    ae1.1200        00:00:00:00:00:00:00:00:00:01  all-active       Up         Root
+  Number of IRB interfaces: 0 (0 up)
+  Number of protect interfaces: 0
+  Number of bridge domains: 1
+    VLAN  Domain-ID Intfs/up   IRB-intf  Mode            MAC-sync v4-SG-sync v6-SG-sync
+    1234               1  1              Extended        Enabled  Disabled   Disabled
+  Number of neighbors: 3
+    Address               MAC    MAC+IP        AD        IM        ES Leaf-label DCI-Peer Flow-label DT2U-SID           DT2M-SID
+    10.0.0.2                1         0         2         1         0                           NO
+    10.0.0.3                1         0         2         1         0                           NO
+    10.0.0.4                1         0         2         1         0                           NO
   Number of ethernet segments: 2
     ESI: 00:00:00:00:00:00:00:00:00:01
       Status: Resolved by IFL ae1.1200
@@ -450,28 +481,64 @@ Instance: EVPN-CE12
       Advertised MAC label: 22
       Advertised aliasing label: 22
       Advertised split horizon label: 23
- root@R3> show evpn instance extensive
- Instance: EVPN-CE34
-....
-  Number of ethernet segments: 2
     ESI: 00:00:00:00:00:00:00:00:00:02
-      Status: Resolved by IFL ae1.3400
-      State-Bitfield: 0x43
-      ESI Route Label: 21
+      Status: Resolved by NH 1048649
+      State-Bitfield: 0x1
+      ESI Route Label: 157
       ESI Refcount: 1
       ESI Num Macs: 1, ESI Num SGDBs: 0
-      Token-Route NH: 0
-      Number of Local interfaces: 1
-      Local interface: ae1.3400, Status: Up/Forwarding
-      Number of remote PEs connected: 1
+      Token-Route NH: 1048649
+      Number of remote PEs connected: 2
         Remote-PE        MAC-label  Aliasing-label  Mode
         10.0.0.4         22         22              all-active
-      DF Election Algorithm: MOD based
-      Designated forwarder: 10.0.0.3
-      Backup forwarder: 10.0.0.4
-      Last designated forwarder update: Apr 10 12:40:51
-      Advertised MAC label: 22
-      Advertised aliasing label: 22
-      Advertised split horizon label: 23
- ....
+        10.0.0.3         22         22              all-active
+  SMET Forwarding: Disabled
+  RIB Table-ID: 184549386, Kernel Table-ID: 6, Kernel Table-Generation: 3
+  EVPN instance flags: 0x1810008
+  RTT Update Timestamp: NA
+  L2ALD state change Timestamp: Mar  6 15:08:12.063 2026
+  Core-Isolation change TS: Apr 10 12:40:25.560 2026, Core-Isolated: N
+  Last Core-Isolation Change Reason: bgp-peer-transition
+
+Instance: __default_evpn__
+  Route Distinguisher: 10.0.0.1:0
+  Number of bridge domains: 0
+  Number of neighbors: 3
+    Address               MAC    MAC+IP        AD        IM        ES Leaf-label DCI-Peer Flow-label DT2U-SID           DT2M-SID
+    10.0.0.2                0         0         0         0         1                           NO
+    10.0.0.3                0         0         0         0         1                           NO
+    10.0.0.4                0         0         0         0         1                           NO
+```
+EVPN is the most complete solution that we have currently, and I love it. 
+
+Now, let's adjust this connectivity, we'll use here the the EVPN Virtual Gateway Address, this way the CE can use any PE to have L3 connectivity in the network, and with this we can provide internet access to the EVPN customers also. The EVPN Virtual Gateway Address permit us to have the anycast gateway configured and also have another address to troubleshooting.  
+
+First, let's provide communication between the sites. The configuration is very simple, create an IRB interface as a gateway and have an unique address inside the network also. Then add the routing-interface into EVPN and don't advertise this route with the default-gateway community.  
+R1:
+```
+set interfaces irb unit 1234 family inet address 10.16.12.1/24 virtual-gateway-address 10.16.12.254
+
+set routing-instances EVPN-CE12 routing-interface irb.1234
+set routing-instances EVPN-CE12 protocols evpn default-gateway no-gateway-community
+```
+R2:
+```
+set interfaces irb unit 1234 family inet address 10.16.12.2/24 virtual-gateway-address 10.16.12.254
+
+set routing-instances EVPN-CE12 routing-interface irb.1234
+set routing-instances EVPN-CE12 protocols evpn default-gateway no-gateway-community
+```
+R3:
+```
+set interfaces irb unit 1234 family inet address 10.16.34.3/24 virtual-gateway-address 10.16.34.254
+
+set routing-instances EVPN-CE34 routing-interface irb.1234
+set routing-instances EVPN-CE34 protocols evpn default-gateway no-gateway-community
+```
+R4:
+```
+set interfaces irb unit 1234 family inet address 10.16.34.4/24 virtual-gateway-address 10.16.34.254
+
+set routing-instances EVPN-CE34 routing-interface irb.1234
+set routing-instances EVPN-CE34 protocols evpn default-gateway no-gateway-community
 ```
