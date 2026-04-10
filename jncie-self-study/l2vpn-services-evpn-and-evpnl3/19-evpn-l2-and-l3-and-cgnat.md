@@ -9,6 +9,9 @@ EVPN is basically the natural evolution of L2VPNs, I'm saying L2VPN in general b
 Here is the topology that we'll use today:
 <img width="1507" height="1138" alt="image" src="https://github.com/user-attachments/assets/516631b6-f67d-442b-a514-99307dff7a3a" />
 
+The situation is as follows, our customer wants to have connection layer 2 and layer 3 connection between the sites. And also wants to have connection to the internet.
+First, we'll configure a normal EVPN, and to provide internet access, we'll integrate the EVPN into L3VPN. All right, let's go. 
+
 First things first, here is the table to follow to configure the EVPN: 
 | CE Router | CE's IP Address | PE | PE-CE Interface | LACP  | VLAN ID | Default Gateway |
 | ----------- | ----------------- | ----------- | ------------------- | ----- | ------- | ---------------- |
@@ -541,4 +544,14 @@ set interfaces irb unit 1234 family inet address 10.16.34.4/24 virtual-gateway-a
 
 set routing-instances EVPN-CE34 routing-interface irb.1234
 set routing-instances EVPN-CE34 protocols evpn default-gateway no-gateway-community
+```
+
+With this, we have the anycast gateways configured:
+```
+[admin@CE34-1] > tool traceroute 10.16.12.12
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS      LOSS  SENT  LAST   AVG    BEST  WORST  STD-DEV
+1  10.16.34.4   0%       4  4.2ms  107.3  4.2   393.4  165.4
+2  10.200.0.2   0%       4  7.8ms  169.6  7.8   625.6  263.5
+3  10.16.12.12  0%       4  2.3ms  10.3   2.3   21.3   7.1
 ```
