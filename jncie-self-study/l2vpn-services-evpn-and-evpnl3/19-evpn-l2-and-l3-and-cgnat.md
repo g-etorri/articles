@@ -383,7 +383,7 @@ And, we have a hidden EVPN route present in our topology, that are route type 4!
 
 EVPN routes type 4: Called Ethernet Segment Routes, this route is used to PEs discover the other PEs connected in the same ESI and to avoid loops in one way, I'm saying in one way because we have two kinds of loop that can happen here, the loop where the BUM traffic is forwarded by a remote CE, and the loop where the BUM traffic was forwarded by the local CE. 
 
-The route type 4 prevent the loop where the BUM traffic is forwarded into EVPN by a remote CE, this route is used to have a DF election, where the two PEs will decide what PE can forward the BUM traffic, yes, only one PE can forward the BUM traffic trough the ESI, preventing loops. This election is exclusive of an ESI, if the PE have other CEs in the same EVI, it can forward the BUM traffic for them normally, the process of election happens trough a calculation defined in the RFC 7432, and it's not important right now, but with this both PEs will have the same result, and only one will be the DF.
+The route type 4 prevent the loop where the BUM traffic is forwarded into EVPN by a remote CE, this route is used to have a DF election, where the two PEs will decide what PE can forward the BUM traffic, yes, only one PE can forward the BUM traffic trough the ESI, preventing loops. This election is exclusive of an ESI and occurs for each EVI in the ESI, if the PE have other CEs in the same EVI, it can forward the BUM traffic for them normally, the process of election happens trough a calculation defined in the RFC 7432, and it's not important right now, but with this both PEs will have the same result, and only one will be the DF.
 
 The route format is ```ROUTE-TYPE:RD::ESI:PE``` and basically, this route is used mainly to discover the PEs in the same ESI, or identify the ESI and his PEs in the network. This is the content of the route after all. R1 receives the route from R2 with the same ESI, and now it knows that R2 is connected into ESI 01, then the DF election happens. For the other PEs, they will know that R1 and R2 are connected into this ESI, indeed the MAC/IP routes have the ESI as next-hop. 
 ```
@@ -546,7 +546,111 @@ set routing-instances EVPN-CE34 routing-interface irb.1234
 set routing-instances EVPN-CE34 protocols evpn default-gateway no-gateway-community
 ```
 
-With this, we have the anycast gateways configured:
+With this, we have the anycast gateways configured and let's check our routing-table: 
+```
+root@R1> show route table EVPN-CE12.evpn.0 match-prefix 2:*
+
+EVPN-CE12.evpn.0: 38 destinations, 38 routes (38 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+2:10.0.0.1:1234::1234::00:00:5e:00:01:01/304 MAC/IP
+                   *[EVPN/170] 00:23:13
+                       Indirect
+2:10.0.0.1:1234::1234::2c:6b:f5:48:61:f0/304 MAC/IP
+                   *[EVPN/170] 00:23:13
+                       Indirect
+2:10.0.0.1:1234::1234::50:ea:05:00:1c:00/304 MAC/IP
+                   *[EVPN/170] 03:31:50
+                       Indirect
+2:10.0.0.2:1234::1234::00:00:5e:00:01:01/304 MAC/IP
+                   *[BGP/170] 00:23:07, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 172
+2:10.0.0.2:1234::1234::2c:6b:f5:89:bd:f0/304 MAC/IP
+                   *[BGP/170] 00:27:43, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16
+2:10.0.0.2:1234::1234::50:ea:05:00:1c:00/304 MAC/IP
+                   *[BGP/170] 03:31:50, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 22
+2:10.0.0.3:1234::1234::00:00:5e:00:01:01/304 MAC/IP
+                   *[BGP/170] 00:22:53, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 427, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 427, Push 36(top)
+2:10.0.0.3:1234::1234::2c:6b:f5:34:ea:f0/304 MAC/IP
+                   *[BGP/170] 00:27:22, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 16, Push 36(top)
+2:10.0.0.3:1234::1234::50:a8:c0:00:2a:00/304 MAC/IP
+                   *[BGP/170] 03:31:48, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 22, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 22, Push 36(top)
+2:10.0.0.4:1234::1234::00:00:5e:00:01:01/304 MAC/IP
+                   *[BGP/170] 00:22:50, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 202
+2:10.0.0.4:1234::1234::2c:6b:f5:0e:34:f0/304 MAC/IP
+                   *[BGP/170] 00:26:48, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 16
+2:10.0.0.4:1234::1234::50:a8:c0:00:2a:00/304 MAC/IP
+                   *[BGP/170] 03:31:44, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 22
+2:10.0.0.1:1234::1234::00:00:5e:00:01:01::10.16.12.254/304 MAC/IP
+                   *[EVPN/170] 00:23:13
+                       Indirect
+2:10.0.0.1:1234::1234::2c:6b:f5:48:61:f0::10.16.12.1/304 MAC/IP
+                   *[EVPN/170] 00:23:13
+                       Indirect
+2:10.0.0.1:1234::1234::50:ea:05:00:1c:00::10.16.12.12/304 MAC/IP
+                   *[EVPN/170] 00:23:09
+                       Indirect
+2:10.0.0.2:1234::1234::00:00:5e:00:01:01::10.16.12.254/304 MAC/IP
+                   *[BGP/170] 00:23:07, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 172
+2:10.0.0.2:1234::1234::2c:6b:f5:89:bd:f0::10.16.12.2/304 MAC/IP
+                   *[BGP/170] 00:24:57, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16
+2:10.0.0.2:1234::1234::50:ea:05:00:1c:00::10.16.12.12/304 MAC/IP
+                   *[BGP/170] 00:16:54, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 22
+2:10.0.0.3:1234::1234::00:00:5e:00:01:01::10.16.34.254/304 MAC/IP
+                   *[BGP/170] 00:22:53, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 427, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 427, Push 36(top)
+2:10.0.0.3:1234::1234::2c:6b:f5:34:ea:f0::10.16.34.3/304 MAC/IP
+                   *[BGP/170] 00:24:43, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 16, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 16, Push 36(top)
+2:10.0.0.3:1234::1234::50:a8:c0:00:2a:00::10.16.34.34/304 MAC/IP
+                   *[BGP/170] 00:16:16, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 22, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 22, Push 36(top)
+2:10.0.0.4:1234::1234::00:00:5e:00:01:01::10.16.34.254/304 MAC/IP
+                   *[BGP/170] 00:22:50, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 202
+2:10.0.0.4:1234::1234::2c:6b:f5:0e:34:f0::10.16.34.4/304 MAC/IP
+                   *[BGP/170] 00:22:50, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 16
+2:10.0.0.4:1234::1234::50:a8:c0:00:2a:00::10.16.34.34/304 MAC/IP
+                   *[BGP/170] 00:16:16, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 22
+```
+Now, we have the MAC and MAC/IP routes from both CEs and all PEs also. Everythng looks fine, let's ask the customer to check the connectivity between the sites:
 ```
 [admin@CE34-1] > tool traceroute 10.16.12.12
 Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
@@ -555,3 +659,45 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 2  10.200.0.2   0%       4  7.8ms  169.6  7.8   625.6  263.5
 3  10.16.12.12  0%       4  2.3ms  10.3   2.3   21.3   7.1
 ```
+And... Is ok, now, we need to provide the internet access to the customer.
+
+First, let's create a VRF in R3, we don't need to create a VRF in the other PEs. So, we'll have two interface to the CGNAT, one we can consider as an inside interface, and the other one the outside interface, inside = LAN and outside = WAN, basically. 
+```
+set interfaces ge-0/0/7 description to-CGN-1
+set interfaces ge-0/0/7 flexible-vlan-tagging
+-----LAN-----
+set interfaces ge-0/0/7 unit 50 description LAN
+set interfaces ge-0/0/7 unit 50 vlan-id 50
+set interfaces ge-0/0/7 unit 50 family inet address 172.16.3.9/30
+
+set policy-options policy-statement next-hop-self then next-hop self
+
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 type internal
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 export next-hop-self
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.10 family inet unicast
+
+-----WAN-----
+set interfaces ge-0/0/7 unit 51 description WAN
+set interfaces ge-0/0/7 unit 51 vlan-id 51
+set interfaces ge-0/0/7 unit 51 family inet address 172.16.3.13/30
+
+set policy-options policy-statement Entrada-CGN term 1 from route-filter 200.0.0.0/24 exact
+set policy-options policy-statement Entrada-CGN term 1 then community add Customer
+set policy-options policy-statement Entrada-CGN term 1 then accept
+set policy-options policy-statement Entrada-CGN then reject
+set policy-options policy-statement Saida-CGN term default from protocol aggregate
+set policy-options policy-statement Saida-CGN term default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-CGN term default then next-hop self
+set policy-options policy-statement Saida-CGN term default then accept
+set policy-options policy-statement Saida-CGN then reject
+
+set protocols bgp group iBGP-CGN-AS65020 type internal
+set protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
+set protocols bgp group iBGP-CGN-AS65020 import Entrada-CGN
+set protocols bgp group iBGP-CGN-AS65020 family inet unicast
+set protocols bgp group iBGP-CGN-AS65020 export Saida-CGN
+set protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.14
+```
+Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will do the NAT and advertise the default route to R3 again, but this time into the L3VPN, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
+
