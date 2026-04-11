@@ -661,7 +661,7 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 ```
 And... Is ok, now, we need to provide the internet access to the customer.
 
-First, let's create a VRF in R3, we don't need to create a VRF in the other PEs. So, we'll have two interface to the CGNAT, one we can consider as an inside interface, and the other one the outside interface, inside = LAN and outside = WAN, basically. 
+First, let's create a VRF in R3 to start the L3-EVPN. So, we'll have two interface to the CGNAT, one we can consider as an inside interface, and the other one the outside interface, inside = LAN and outside = WAN, basically. 
 ```
 set interfaces ge-0/0/7 description to-CGN-1
 set interfaces ge-0/0/7 flexible-vlan-tagging
@@ -670,34 +670,24 @@ set interfaces ge-0/0/7 unit 50 description LAN
 set interfaces ge-0/0/7 unit 50 vlan-id 50
 set interfaces ge-0/0/7 unit 50 family inet address 172.16.3.9/30
 
-set policy-options policy-statement next-hop-self then next-hop self
+set routing-instances VRF-EVPN routing-options static route 0.0.0.0/0 next-hop 172.16.3.10
 
-set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 type internal
-set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
-set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 export next-hop-self
-set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.10 family inet unicast
-
+set routing-instances VRF-EVPN description VRF-EVPN
+set routing-instances VRF-EVPN interface ge-0/0/7.50
+set routing-instances VRF-EVPN interface irb.1234
+set routing-instances VRF-EVPN route-distinguisher 10.0.0.3:12341
+set routing-instances VRF-EVPN vrf-target target:65020:12341
+set routing-instances VRF-EVPN vrf-table-label
 -----WAN-----
 set interfaces ge-0/0/7 unit 51 description WAN
 set interfaces ge-0/0/7 unit 51 vlan-id 51
 set interfaces ge-0/0/7 unit 51 family inet address 172.16.3.13/30
 
-set policy-options policy-statement Entrada-CGN term 1 from route-filter 200.0.0.0/24 exact
-set policy-options policy-statement Entrada-CGN term 1 then community add Customer
-set policy-options policy-statement Entrada-CGN term 1 then accept
-set policy-options policy-statement Entrada-CGN then reject
-set policy-options policy-statement Saida-CGN term default from protocol aggregate
-set policy-options policy-statement Saida-CGN term default from route-filter 0.0.0.0/0 exact
-set policy-options policy-statement Saida-CGN term default then next-hop self
-set policy-options policy-statement Saida-CGN term default then accept
-set policy-options policy-statement Saida-CGN then reject
-
-set protocols bgp group iBGP-CGN-AS65020 type internal
-set protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
-set protocols bgp group iBGP-CGN-AS65020 import Entrada-CGN
-set protocols bgp group iBGP-CGN-AS65020 family inet unicast
-set protocols bgp group iBGP-CGN-AS65020 export Saida-CGN
-set protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.14
+set routing-options static route 200.0.0.0/24 next-hop 172.16.3.14
 ```
-Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will do the NAT and advertise the default route to R3 again, but this time into the L3VPN, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
+Here, to make the whole thing easier, I made a simple static routing, when in the L3VPN we have a default route to the CGNAT device, and in the global RIB we have a route for the public prefix, where the private addresses was translated to a public IP of the prefix. 
 
+All right, let's check the advertisements now:
+```
+
+```
