@@ -670,8 +670,17 @@ set interfaces ge-0/0/7 unit 50 description LAN
 set interfaces ge-0/0/7 unit 50 vlan-id 50
 set interfaces ge-0/0/7 unit 50 family inet address 172.16.3.9/30
 
-set routing-instances VRF-EVPN routing-options static route 0.0.0.0/0 next-hop 172.16.3.10
+set policy-options policy-statement Saida-CGN-VRF term 1 from route-filter 10.16.12.0/24 exact
+set policy-options policy-statement Saida-CGN-VRF term 1 from route-filter 10.16.34.0/24 exact
+set policy-options policy-statement Saida-CGN-VRF term 1 then next-hop self
+set policy-options policy-statement Saida-CGN-VRF term 1 then accept
+set policy-options policy-statement Saida-CGN-VRF then reject
 
+set routing-instances VRF-EVPN instance-type vrf
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 type internal
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 export Saida-CGN-VRF
+set routing-instances VRF-EVPN protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.10 family inet unicast
 set routing-instances VRF-EVPN description VRF-EVPN
 set routing-instances VRF-EVPN interface ge-0/0/7.50
 set routing-instances VRF-EVPN interface irb.1234
@@ -683,11 +692,72 @@ set interfaces ge-0/0/7 unit 51 description WAN
 set interfaces ge-0/0/7 unit 51 vlan-id 51
 set interfaces ge-0/0/7 unit 51 family inet address 172.16.3.13/30
 
-set routing-options static route 200.0.0.0/24 next-hop 172.16.3.14
+set policy-options policy-statement Entrada-CGN term 1 from route-filter 200.0.0.0/24 exact
+set policy-options policy-statement Entrada-CGN term 1 then community add Customer
+set policy-options policy-statement Entrada-CGN term 1 then accept
+set policy-options policy-statement Entrada-CGN then reject
+set policy-options policy-statement Saida-CGN term default from protocol aggregate
+set policy-options policy-statement Saida-CGN term default from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement Saida-CGN term default then next-hop self
+set policy-options policy-statement Saida-CGN term default then accept
+set policy-options policy-statement Saida-CGN then reject
+
+set protocols bgp group iBGP-CGN-AS65020 type internal
+set protocols bgp group iBGP-CGN-AS65020 description iBGP-CGN-AS65020
+set protocols bgp group iBGP-CGN-AS65020 import Entrada-CGN
+set protocols bgp group iBGP-CGN-AS65020 family inet unicast
+set protocols bgp group iBGP-CGN-AS65020 export Saida-CGN
+set protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.14
 ```
-Here, to make the whole thing easier, I made a simple static routing, when in the L3VPN we have a default route to the CGNAT device, and in the global RIB we have a route for the public prefix, where the private addresses was translated to a public IP of the prefix. 
+Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will advertise the default route to R3 again, but this time into the L3VPN, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
 
 All right, let's check the advertisements now:
+```
+root@R3> show route advertising-protocol bgp 172.16.3.10
+
+VRF-EVPN.inet.0: 11 destinations, 11 routes (11 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 10.16.34.0/24           Self                         100        I
+
+root@R3> show route receive-protocol bgp 172.16.3.10
+
+VRF-EVPN.inet.0: 12 destinations, 29 routes (12 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               172.16.3.10                  100        I
+
+```
+Here, we are advertising the local route, of the IRB interface. If you are following the tought, you know here that we have a problem. 
+
+Let's check the global RIB now:
+```
+root@R3> show route advertising-protocol bgp 172.16.3.14
+
+inet.0: 240 destinations, 248 routes (224 active, 0 holddown, 17 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               Self                         100        I
+
+root@R3> show route receive-protocol bgp 172.16.3.14
+
+inet.0: 240 destinations, 248 routes (224 active, 0 holddown, 17 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 200.0.0.0/24            172.16.3.14                  100        I
+
+```
+Here, we are advertising the default route, that the CGN is advertsiing into the VRF, and we are receiving the public prefix, that we are marking the customer community to advertise to our peerings. 
+
+Now, may are you asking yourself that you need to configure the VRF in the other PEs and all the things will be resolved. And you are right. But here the things are different, we won't use inet-vpn to exchange the routes, we'll use the evpn to do this. 
+
+First, we need to configure the VRF on the other PEs:
+```
+set routing-instances VRF-EVPN instance-type vrf
+set routing-instances VRF-EVPN description VRF-EVPN
+set routing-instances VRF-EVPN interface irb.1234
+set routing-instances VRF-EVPN route-distinguisher 10.0.0.1:12341
+set routing-instances VRF-EVPN vrf-target target:65020:12341
+set routing-instances VRF-EVPN vrf-table-label
+```
+
+With this, we already have connectivity in the sites to internet. Let's check: 
 ```
 
 ```
