@@ -4,13 +4,13 @@ Hello guys, how about you? Everything is going right? I expect you are fine!
 
 Today, we'll dive in a fun topic that I fall in love in the first day, EVPN! 
 
-EVPN is basically the natural evolution of L2VPNs, I'm saying L2VPN in general because we have some flavor of EVPN, that here I won't explore. And we can integrate L2 EVPNs into L3VPN, that we can call L3 EVPNs! 
+EVPN is basically the natural evolution of L2VPNs, I'm saying L2VPN in general because we have some flavor of EVPN, that here I won't explore. And we can integrate L2 EVPNs into VRFs, that we can call L3 EVPNs! 
 
 Here is the topology that we'll use today:
 <img width="1507" height="1138" alt="image" src="https://github.com/user-attachments/assets/516631b6-f67d-442b-a514-99307dff7a3a" />
 
 The situation is as follows, our customer wants to have connection layer 2 and layer 3 connection between the sites. And also wants to have connection to the internet.
-First, we'll configure a normal EVPN, and to provide internet access, we'll integrate the EVPN into L3VPN. All right, let's go. 
+First, we'll configure a normal EVPN, and to provide internet access, we'll integrate the EVPN into a VRF. All right, let's go. 
 
 First things first, here is the table to follow to configure the EVPN: 
 | CE Router | CE's IP Address | PE | PE-CE Interface | LACP  | VLAN ID | Default Gateway |
@@ -709,7 +709,7 @@ set protocols bgp group iBGP-CGN-AS65020 family inet unicast
 set protocols bgp group iBGP-CGN-AS65020 export Saida-CGN
 set protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.14
 ```
-Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will advertise the default route to R3 again, but this time into the L3VPN, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
+Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will advertise the default route to R3 again, but this time into the VRF, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
 
 All right, let's check the advertisements now:
 ```
