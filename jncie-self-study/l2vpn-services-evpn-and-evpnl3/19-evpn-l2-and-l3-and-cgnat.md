@@ -1,18 +1,18 @@
 # EVPN Layer 2 and Layer 3 Configuration
 
-Hello guys, how about you? Everything is going right? I expect you are fine! 
+Hello guys, how are you doing? I hope everything is going well!
 
-Today, we'll dive in a fun topic that I fall in love in the first day, EVPN! 
+Today, we'll dive into a fun topic that I fell in love with on day one: EVPN!
 
-EVPN is basically the natural evolution of L2VPNs, I'm saying L2VPN in general because we have some flavor of EVPN, that here I won't explore. And we can integrate L2 EVPNs into VRFs, that we can call L3 EVPNs! 
+EVPN is essentially the natural evolution of L2VPNs. I say L2VPNs in general because EVPN has several flavors that I won't fully explore here. But beyond Layer 2, we can also integrate L2 EVPNs directly into VRFs, effectively creating L3 EVPNs!
 
-Here is the topology that we'll use today:
+Here is the topology we'll be using today:
 <img width="1507" height="1138" alt="image" src="https://github.com/user-attachments/assets/516631b6-f67d-442b-a514-99307dff7a3a" />
 
-The situation is as follows, our customer wants to have connection layer 2 and layer 3 connection between the sites. And also wants to have connection to the internet.
-First, we'll configure a normal EVPN, and to provide internet access, we'll integrate the EVPN into a VRF. All right, let's go. 
+The scenario is as follows: our customer wants Layer 2 and Layer 3 connectivity between their sites, plus internet access.
+First, we'll configure a standard Layer 2 EVPN. Then, to provide internet access and routing, we'll stitch the EVPN into a VRF. All right, let's get to it.
 
-First things first, here is the table to follow to configure the EVPN: 
+First things first, here is the reference table for our EVPN configuration:
 | CE Router | CE's IP Address | PE | PE-CE Interface | LACP  | VLAN ID | Default Gateway |
 | ----------- | ----------------- | ----------- | ------------------- | ----- | ------- | ---------------- |
 | CE12-1      | 10.16.12.12/24   | R1          | ae1.1200            | Active | 1200    | 10.16.12.254/24 |
@@ -20,7 +20,7 @@ First things first, here is the table to follow to configure the EVPN:
 | CE34-1      | 10.16.34.34/24   | R3          | ae1.3400            | Active | 3400    | 10.16.34.254/24 |
 | CE34-1      | 10.16.34.34/24   | R4          | ae1.3400            | Active | 3400    | 10.16.34.254/24 |
 
-Let's enable the evpn family in our BGP mesh: 
+Let's enable the evpn family in our BGP mesh:: 
 RR:
 ```
 set protocols bgp group iBGP-AS65020-West family evpn signaling nexthop-resolution no-resolution
@@ -34,14 +34,14 @@ set protocols bgp group iBGP-AS65020-East family evpn signaling
 or
 set protocols bgp group iBGP-AS65020-West family evpn signaling
 ```
-Ok, with the family EVPN running in the network, we can configure the EVI! 
+Ok, with the EVPN family running across the backbone, we can configure our EVPN Instances (EVI)!
 
-Both sites belongs the same customer, and both sites are multihomed. Different than VPLS, here we can do a active-active multihoming, using ESI-LAGs! 
-What is this? Basically, we'll configure a LACP in both PEs with the same system-id, for the customer the PEs will be like a single one, the traffic will be load-balanced between the two PEs. And the traffic for the CE, will be load-balanced using the aliasing label! To avoid loops, we have a DF Router, that will forward the BUM traffic. This is perfect, I confess. 
+Both sites belong to the same customer, and both are multi-homed. Unlike VPLS, EVPN allows us to implement true active-active multi-homing using ESI-LAGs!
+How does this work? Basically, we configure LACP on both PEs using the exact same system-ID. From the customer's perspective, the two PEs look like a single logical switch, and outbound traffic is naturally load-balanced across the links. Return traffic destined for the CE is load-balanced using the EVPN Aliasing label! To prevent forwarding loops, a Designated Forwarder (DF) is elected to handle BUM (Broadcast, Unknown Unicast, Multicast) traffic. It’s an incredibly elegant design, I must confess.
 
-Another detail in the topology, is the VLAN used, to permit the communication between the two sites, we'll do a VLAN normalization, swapping the VLAN tag to 1234. 
+Another key detail in our topology is the VLAN mapping. To allow communication between the two sites, we'll perform VLAN normalization, translating the local VLAN tags to a common VLAN of 1234 in the core.
 
-Let's start with the configuration in R1 and R2:
+Let's start with the configuration on R1 and R2:
 R1:
 ```
 set interfaces ge-0/0/6 description to-CE12-1
@@ -88,11 +88,11 @@ set routing-instances EVPN-CE12 interface ae1.1200
 set routing-instances EVPN-CE12 route-distinguisher 10.0.0.2:1234
 set routing-instances EVPN-CE12 vrf-target target:65020:1234
 ```
-First, we'll bind the physical interface into the LAG, and in the LAG we need to define the ESI and this mode of operation, that will be active-active. The LACP system-id needs to be the same in both PEs.
+First, we bind the physical interface to the LAG, and on the LAG, we define the Ethernet Segment Identifier (ESI) and its operational mode (which will be all-active). The LACP system-id must be identical on both PEs.
 
-In the instance, we need to create an EVPN instance, and the encapsulation will be MPLS, you don't need to specify the encapsulation, by default is MPLS. And the EVI needs RD and RT, like a L3VPN! All the components makes EVPN fantastic and scalable. You can note the ```vlan-id``` knob, this is used to do the VLAN normalization. 
+In the routing instance, we create an EVI and set the encapsulation to MPLS (though strictly speaking, you don't need to specify this, as MPLS is the default in Junos). Just like a L3VPN, the EVI requires an RD and RT! Borrowing these BGP components is exactly what makes EVPN so fantastic and scalable. Notice the vlan-id 1234 knob, this handles the VLAN normalization.
 
-Now, let's make the configuration of the other site to start some tests. We'll apply the same logic:
+Now, let's configure the other site so we can run some tests. We'll apply the exact same logic:
 R3:
 ```
 set interfaces ge-0/0/9 description to-CE34-1
@@ -139,7 +139,7 @@ set routing-instances EVPN-CE34 interface ae1.3400
 set routing-instances EVPN-CE34 route-distinguisher 10.0.0.4:1234
 set routing-instances EVPN-CE34 vrf-target target:65020:1234
 ```
-With this, we can learn the MAC addresses from PE-CE interface, but we don't have any connectivity between the sites yet, do you know why? Because the IP addresses don't belongs to the same network. We only have layer 2 connectivity, let's see the LLDP neighbors...
+With this committed, we are now learning MAC addresses from the PE-CE interfaces, but we still don't have ping connectivity between the sites. Do you know why? Because their IP addresses don't belong to the same subnet! We only have pure Layer 2 connectivity right now. Let's look at the LLDP neighbors...
 ```
 [admin@CE12-1] > ip nei pr
 Columns: INTERFACE, ADDRESS, MAC-ADDRESS, IDENTITY, VERSION, BOARD
@@ -151,9 +151,9 @@ Columns: INTERFACE, ADDRESS, MAC-ADDRESS, IDENTITY, VERSION, BOARD
 #  INTERFACE  ADDRESS      MAC-ADDRESS        IDENTITY  VERSION                            BOARD
 0  vlan3400   10.16.12.12  50:EA:05:00:1C:00  CE12-1    7.8 (stable) Feb/24/2023 09:03:00  CHR
 ```
-Both CEs have LLDP neighboring, but don't have any layer 3 connectivity. 
+Both CEs show LLDP neighbor adjacency, confirming L2 is up, but there's no Layer 3 routing yet.
 
-Let's check the EVPN routes, to see what we already have. 
+Let's check the EVPN routing table to see what routes we have acquired so far:
 ```
 root@R1> show route table EVPN-CE12.evpn.0
 
@@ -222,27 +222,25 @@ EVPN-CE12.evpn.0: 15 destinations, 15 routes (15 active, 0 holddown, 0 hidden)
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.3 via ge-0/0/2.0, Push 0
 ```
-Here we have routes type 1, 2 and 3. 
-EVPN routes type 1: Here we have two sub-types of route, hahaha. We can define two kinds of route type 1. 
+Here we have EVPN Route Types 1, 2, and 3.
 
-The Ethernet Auto-Discovery Per-ESI and Per-EVI. **Ethernet AD Per-ESI** is created for the entire ESI, if the PE is connected in two ESIs, it will generate two routes, this route contains each RT of EVI in the ESI, in other words, if in one ESI we have 10 EVIs, this route will contain the 10 RTs of the EVIs, also will contain a special community that is a special ESI label (This is the main difference between the routes, the Per-EVI uses the MPLS label field of the NLRI) and the ESI number.
+**EVPN Type 1 Routes**: We actually have two sub-types here, haha.
+**Ethernet AD Per-ESI**: This route is generated for the entire ESI. If the PE is connected to an ESI that spans multiple EVIs, it generates a single route containing the Route Targets (RTs) of all EVIs active on that ESI. (This is a key difference from the Per-EVI route, which uses the MPLS label field in the NLRI). This route also carries the ESI number and a special community containing the ESI Label.
+This route serves two vital functions:
 
-This route have two key functions, the first is the withdrawal of the routes, if the connection PE-CE fails in the ESI, this route type 1 is withdrawal by the PE, the remote PEs will converge this traffic to the other PE of the ESI, this is extremely useful, you can understand this better if we have 500 MACs learned by the interface that goes down, and if we have a lot of EVIs configured in the interface, with the withdrawal of the route type 1, the remote PEs can converge the traffic of all EVIs in the ESI, and don't need to wait the withdrawal of all 500 routes MAC/IP, got it? 
+Mass Withdrawal: If the PE-CE physical link fails, the PE withdraws this single Type 1 route. Remote PEs immediately know to converge traffic over to the surviving PE in the ESI. Imagine having 500 MACs learned across dozens of EVIs on that interface. Instead of waiting to withdraw 500 individual MAC/IP routes, the single AD Per-ESI withdrawal instantly shifts the traffic. Make sense?
 
-And the second function is protect avoid loops generated by the local CE, this is achieved trough the community of the route. In the community field we have two things, the first is a bit that identifies if the ESI is single-active or active-active, and the second is the special ESI label, now follow me in the tought, if CE12-1 sends a broadcast packet to R2, R2 will flood this traffic to R1 that is DF, then the traffic will be forwarded to CE12-1 and so on... the loop is happening. 
+Loop Prevention (Split Horizon): This is achieved through the extended community attached to the route. It contains a bit indicating if the ESI is single-active or active-active, and crucially, the special ESI Label. Now follow my train of thought here: if CE12-1 sends a broadcast frame to R2, R2 will flood this traffic across the core to R1 (because R1 might be the DF for other sites). If R1 just blindly forwarded it back down to CE12-1, we'd have a loop. To solve this, when R2 floods BUM traffic to another PE in the same ESI, it pushes this special ESI label at the bottom of the stack. When R1 receives the frame and pops the label, it recognizes the ESI Label ("I AM BUM TRAFFIC FROM ESI-1, DO NOT SEND ME BACK TO ESI-1"). R1 will forward it to other local interfaces but drop it for the originating ESI. This label is also known as the Split Horizon Label.
 
-To avoid this, R2 could simply not forward the traffic to R1, but if R1 haves another site connected? We could had a problem. And thinking in this scenario, this special label is used, when R2 needs to forward a BUM traffic to another PE of the same ESI, the traffic will be forwarded with a new bottom label, this special ESI label. When R1 pops the label, will identify this label as a "I AM BUM TRAFFIC OF X ESI, PLEASE AVOID LOOPS", and with this, R1 simply forwards the traffic to the other sites, or discards the traffic, this label also is called as **SPLIT HORIZON LABEL**.   
+**Ethernet AD Per-EVI** This route is generated per EVI active on the ESI. It has two main jobs: enabling load-balancing in all-active mode (Aliasing), and enabling fast backup paths in single-active mode.
 
+Aliasing: Let's follow the thought process again. CE12-1 sends a unicast frame hashing to R1. R1 learns the source MAC and advertises it via BGP. But what if a remote PE (say, R3) needs to send traffic back to that MAC before R2 has naturally learned it? Since R3 knows R1 and R2 share the ESI, it wants to load-balance across both PEs. The Per-EVI route advertises an Aliasing Label. Remote PEs use this label to send traffic to R2, and R2 forwards it down to the ESI even if the specific MAC isn't populated in its local table yet!
 
-**Ethernet AD Per-EVI** is created for each EVI in the ESI. This route have two key functions, enabling the load-balance in all-active mode, and another one enabling the backup-paths in the single-active mode. Let's go to the aliasing-label, follow me in the tought again. The CE12-1 sends a frame to the R1 but not to R2, naturally the next-hop is the ESI, then the remote PEs will have the ESI as next-hop and can send the traffic to R2. R2 can learn the MAC trough the EVPN advertised by R1, but what if R2 don't process this route in time, then R2 will flood this traffic naturally. 
+Backup Paths: In single-active setups, remote PEs use this route to install the standby PE as a backup path in the FIB. When the primary PE's AD Per-ESI route is withdrawn, the backup path instantly becomes active.
 
-To avoid this scenario, the remote PEs will use the aliasing-label instead of the normal label of EVPN, with this label the PE2 even without the MAC address learned, will forward the traffic to the ESI, making the load-balance of the traffic without loss any packet. 
+You get the idea, right? Both of these Type 1 routes work together to advertise the presence of an ESI, distribute the topology, and dictate how traffic should be forwarded efficiently.
 
-In the backup-paths process that happens when we have a single-active ESI, the remote PEs will install the routes for the secondary PEs as backup in the FIB, then, when the remote PEs receive the withdrawal of the AD Per-ESI, this backup routes will become active. 
-
-You got the type 1 routes? Both kind of routes will work together, to discovery wath EVIs we have in the ESI and how forward the traffic in the right manner. 
-
-In the output, first we have the AD Per-ESI with the ```ROUTE-TYPE:RD::ESI```, you can notice the esi-label community and the RT of EVI in the ESI, that identifies if we have an active-active or single-active ESI. And so on the AD Per-EVI with the ```ROUTE-TYPE:RD::ESI```, and we can notice the RT of the EVI and the aliasing label advertised.  
+In the output, you can see the AD Per-ESI formatted as ```ROUTE-TYPE:RD::ESI```. Notice the esi-label community and the RT. Right below it, you see the AD Per-EVI formatted as ```ROUTE-TYPE:RD::ESI::0/192```, carrying the Aliasing label.
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 1:* detail
 ....
@@ -304,8 +302,8 @@ root@R1> show route table EVPN-CE12.evpn.0 match-prefix 1:* detail
                 Primary Routing Table: bgp.evpn.0
                 Thread: junos-main
 ```
-EVPN routes type 2: Called MAC/IP Routes, are responsible by advertise the MAC addresses, and also can advertise the MAC+IP addresses trough ARP snooping. This routes also contain the labels that the remote PE must use to forward the traffic, the VLAN/BRIDGE-DOMAIN that the MAC address belongs, and the ESI where the route was learned. 
-The route structure is: ```ROUTE-TYPE:RD::VLAN::MAC-ADDRESS```
+**EVPN Type 2 Routes** (MAC/IP Advertisement Route): These routes are responsible for advertising MAC addresses. They can also advertise MAC+IP bindings simultaneously via ARP snooping! These routes contain the MPLS label remote PEs must use to reach that MAC, the VLAN/Bridge-Domain the MAC belongs to, and the ESI where it was learned.
+The structure is: ```ROUTE-TYPE:RD::VLAN::MAC-ADDRESS```.
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 2:* detail
 ....
@@ -342,9 +340,9 @@ root@R1> show route table EVPN-CE12.evpn.0 match-prefix 2:* detail
                 Thread: junos-main
 ....
 ```
-EVPN routes type 3: Called Inclusive Multicast Ethernet Tag Route, this route is used to build a inclusive tree to forward not only multicast traffic, but broadcast and unknown unicast also, like a MVPN, indeed, this technique was copied of MVPNs! Hahahah, nothing is created, everything is tranformed. 
+**EVPN Type 3 Routes** (Inclusive Multicast Ethernet Tag Route): This route builds an inclusive forwarding tree used for BUM traffic (Broadcast, Unknown Unicast, and Multicast). It’s heavily inspired by MVPNs! Hahaha, as Lavoisier said: nothing is created, everything is transformed.
 
-In the route below we can see almost all characteristics that we have in route type 2, but we have the router-id of the remote PE instead of MAC/IP. In the details of the route we can see the PMSI and the label that will be used to forward the BUM traffic, this is the most important information. 
+In the output below, you see many of the same characteristics as a Type 2 route, but it features the router-ID of the remote PE instead of a MAC/IP. Crucially, the route details display the PMSI Tunnel attribute and the MPLS label that will be used to forward the BUM traffic across the core.
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 3:* detail
 ....
@@ -379,13 +377,13 @@ root@R1> show route table EVPN-CE12.evpn.0 match-prefix 3:* detail
 ....
 ```
 
-And, we have a hidden EVPN route present in our topology, that are route type 4!!! 
+And, we have a hidden EVPN route working behind the scenes in our topology: the Type 4 route!!!
 
-EVPN routes type 4: Called Ethernet Segment Routes, this route is used to PEs discover the other PEs connected in the same ESI and to avoid loops in one way, I'm saying in one way because we have two kinds of loop that can happen here, the loop where the BUM traffic is forwarded by a remote CE, and the loop where the BUM traffic was forwarded by the local CE. 
+**EVPN Type 4 Routes** (Ethernet Segment Route): This route allows PEs to discover other PEs connected to the exact same ESI. We mentioned earlier that we need to prevent BUM traffic loops caused by local CEs. The Type 4 route handles the DF (Designated Forwarder) election to solve this.
 
-The route type 4 prevent the loop where the BUM traffic is forwarded into EVPN by a remote CE, this route is used to have a DF election, where the two PEs will decide what PE can forward the BUM traffic, yes, only one PE can forward the BUM traffic trough the ESI, preventing loops. This election is exclusive of an ESI and occurs for each EVI in the ESI, if the PE have other CEs in the same EVI, it can forward the BUM traffic for them normally, the process of election happens trough a calculation defined in the RFC 7432, and it's not important right now, but with this both PEs will have the same result, and only one will be the DF.
+To prevent duplicate flooding on an All-Active segment, only one PE is allowed to forward BUM traffic out to the CE. This election occurs per EVI on the ESI. The PEs use the Type 4 routes to discover each other, and then run a deterministic mathematical algorithm (defined in RFC 7432) to elect the DF. Because both PEs run the exact same math, they seamlessly agree on who takes the forwarding role.
 
-The route format is ```ROUTE-TYPE:RD::ESI:PE``` and basically, this route is used mainly to discover the PEs in the same ESI, or identify the ESI and his PEs in the network. This is the content of the route after all. R1 receives the route from R2 with the same ESI, and now it knows that R2 is connected into ESI 01, then the DF election happens. For the other PEs, they will know that R1 and R2 are connected into this ESI, indeed the MAC/IP routes have the ESI as next-hop. 
+The route format is ```ROUTE-TYPE:RD::ESI:PE```. Ultimately, R1 receives this route from R2 and says, "Ah, R2 is also connected to ESI 01. Let's run the DF election." For the rest of the PEs in the network, they see the MAC/IP routes pointing to the ESI next-hop and know traffic can go to either R1 or R2.
 ```
 root@R1> show route table bgp.evpn.0 match-prefix 4:* detail
 
@@ -437,7 +435,7 @@ bgp.evpn.0: 22 destinations, 22 routes (22 active, 0 holddown, 0 hidden)
 ```
 
 
-Now, verifying the EVI, we can see all a lot of details, the VLAN used, the MAC database stats, the number of bridge domains, the neigbors of EVI, the ESIs in the EVI and the PEs connected in the ESI also, DF PE, aliasing label, split-horizon label and so on...   
+Now, checking the EVI status, we can see a beautiful summary of everything: the VLAN, the MAC database stats, bridge domains, EVPN neighbors, the ESIs, the DF PE, Aliasing label, Split Horizon label, and so on...
 ```
 root@R1> show evpn instance extensive
 Instance: EVPN-CE12
@@ -512,11 +510,12 @@ Instance: __default_evpn__
     10.0.0.3                0         0         0         0         1                           NO
     10.0.0.4                0         0         0         0         1                           NO
 ```
-EVPN is the most complete solution that we have currently, and I love it. 
+EVPN is the most complete and robust solution we currently have in networking, and I absolutely love it.
 
-Now, let's adjust this connectivity, we'll use here the the EVPN Virtual Gateway Address, this way the CE can use any PE to have L3 connectivity in the network, and with this we can provide internet access to the EVPN customers also. The EVPN Virtual Gateway Address permit us to have the anycast gateway configured and also have another address to troubleshooting.  
+Now, let's establish L3 connectivity. We'll use the EVPN Virtual Gateway Address. This allows the CE to use any local PE as its default gateway, and through this, we can also route traffic to the internet! The Virtual Gateway Address feature allows us to provision an Anycast Gateway while still keeping a unique physical IP on the IRB for troubleshooting and local pinging.
 
-First, let's provide communication between the sites. The configuration is very simple, create an IRB interface as a gateway and have an unique address inside the network also. Then add the routing-interface into EVPN and don't advertise this route with the default-gateway community.  
+The configuration is very simple: create an IRB interface with a unique IP address, and attach the Anycast Virtual Gateway address. Then, bind the routing interface to the EVPN instance and instruct BGP not to advertise this IP with the default-gateway community (to avoid host route pollution).
+
 R1:
 ```
 set interfaces irb unit 1234 family inet address 10.16.12.1/24 virtual-gateway-address 10.16.12.254
@@ -546,7 +545,7 @@ set routing-instances EVPN-CE34 routing-interface irb.1234
 set routing-instances EVPN-CE34 protocols evpn default-gateway no-gateway-community
 ```
 
-With this, we have the anycast gateways configured and let's check our routing-table: 
+With the Anycast Gateways configured, let's verify our routing table:
 ```
 root@R1> show route table EVPN-CE12.evpn.0 match-prefix 2:*
 
@@ -650,7 +649,7 @@ EVPN-CE12.evpn.0: 38 destinations, 38 routes (38 active, 0 holddown, 0 hidden)
                       AS path: I, validation-state: unverified
                     >  to 10.200.0.3 via ge-0/0/2.0, Push 22
 ```
-Now, we have the MAC and MAC/IP routes from both CEs and all PEs also. Everythng looks fine, let's ask the customer to check the connectivity between the sites:
+Now we successfully have the MAC and MAC/IP routes imported from both CEs across all PEs. Everything looks fine, let's ask the customer to check the L3 connectivity between the sites:
 ```
 [admin@CE34-1] > tool traceroute 10.16.12.12
 Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
@@ -659,9 +658,9 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 2  10.200.0.2   0%       4  7.8ms  169.6  7.8   625.6  263.5
 3  10.16.12.12  0%       4  2.3ms  10.3   2.3   21.3   7.1
 ```
-And... Is ok, now, we need to provide the internet access to the customer.
+And... it's solid! Now, the final step: providing internet access to the customer.
 
-First, let's create a VRF in R3 to start the L3-EVPN. So, we'll have two interface to the CGNAT, one we can consider as an inside interface, and the other one the outside interface, inside = LAN and outside = WAN, basically. 
+First, we'll create a VRF on R3 to begin the L3-EVPN interworking. We'll have two interfaces connecting to our CGNAT: one acting as the "inside" interface (LAN/VRF facing) and the other as the "outside" interface (WAN/Global routing facing).
 ```
 set interfaces ge-0/0/7 description to-CGN-1
 set interfaces ge-0/0/7 flexible-vlan-tagging
@@ -709,9 +708,9 @@ set protocols bgp group iBGP-CGN-AS65020 family inet unicast
 set protocols bgp group iBGP-CGN-AS65020 export Saida-CGN
 set protocols bgp group iBGP-CGN-AS65020 neighbor 172.16.3.14
 ```
-Here, R3 will advertise an default route and will receive the public prefix of the CGNAT. CGNAT will advertise the default route to R3 again, but this time into the VRF, and R3 will advertise this into EVPN. You got it? Yeah, I know. 
+Here, R3 advertises a default route globally and receives the public prefix from the CGNAT. The CGNAT then turns around and advertises a default route back to R3, but this time into the VRF context. R3 takes that default route and stitches it into the EVPN domain as a Type 5 route. You got it? I know, it’s a beautiful dance!
 
-All right, let's check the advertisements now:
+Let's check the BGP advertisements to verify:
 ```
 root@R3> show route advertising-protocol bgp 172.16.3.10
 
@@ -726,9 +725,9 @@ VRF-EVPN.inet.0: 12 destinations, 29 routes (12 active, 0 holddown, 0 hidden)
 * 0.0.0.0/0               172.16.3.10                  100        I
 
 ```
-Here, we are advertising the local route, of the IRB interface. If you are following the tought, you know here that we have a problem. 
+Here we are cleanly advertising the local route of the IRB interface. If you are following the architecture, you know we still have one missing piece across the core.
 
-Let's check the global RIB now:
+Let's check the global RIB as well:
 ```
 root@R3> show route advertising-protocol bgp 172.16.3.14
 
@@ -743,11 +742,11 @@ inet.0: 240 destinations, 248 routes (224 active, 0 holddown, 17 hidden)
 * 200.0.0.0/24            172.16.3.14                  100        I
 
 ```
-Here, we are advertising the default route, that the CGN is advertsiing into the VRF, and we are receiving the public prefix, that we are marking the customer community to advertise to our peerings. 
+Here, we are successfully advertising the default route generated by the aggregate, and receiving the public prefix from the CGNAT, which we tag with the customer community before propagating it to our peerings.
 
-Now, may are you asking yourself that you need to configure the VRF in the other PEs and all the things will be resolved. And you are right. But here the things are different, we won't use inet-vpn to exchange the routes, we'll use the evpn to do this. 
+Now, you might be asking yourself if you just need to configure standard L3VPN VRFs on the other PEs to resolve everything. You wouldn't be completely wrong, but we're doing things differently here. We won't use the inet-vpn family to exchange these routes across the core; we'll use pure evpn (Type 5 routes)!
 
-First, we need to configure the VRF on the other PEs:
+First, we need to provision the VRF structure on the remaining PEs:
 ```
 set routing-instances VRF-EVPN instance-type vrf
 set routing-instances VRF-EVPN description VRF-EVPN
@@ -757,7 +756,7 @@ set routing-instances VRF-EVPN vrf-target target:65020:12341
 set routing-instances VRF-EVPN vrf-table-label
 ```
 
-To show you the difference between this VRF and the L3VPN VRF, when you want to see the routes from a VRF, if you not complete the command with inet.0 ou bgp.l3vpn.0, Junos shows both tables, the primary table that is bgp.l3vpn.0 and the secondary table, where the Junos put the inet routes correctly. 
+To highlight the difference between this EVPN-stitched VRF and a legacy L3VPN VRF, consider how Junos displays the routing tables. In L3VPN, if you look at a VRF without specifying inet.0 or bgp.l3vpn.0, Junos displays both: the primary table (bgp.l3vpn.0) and the secondary table where the routes are properly injected.
 ```
 root@R1> show route table VRF-C2-SPOKE detail
 
@@ -771,7 +770,7 @@ VRF-C2-SPOKE.inet.0: 20 destinations, 25 routes (19 active, 0 holddown, 6 hidden
                 Primary Routing Table: bgp.l3vpn.0
 ....
 ```
-In a L3-EVPN, we can exchange the routes trough the evpn family, and if we have the inet-vpn enable, we can exchange the routes trough this family also, check here: 
+But in L3-EVPN, we exchange the routes directly through the evpn family. Let's look at the routing table now:
 ```
 root@R1> show route table VRF-EVPN. detail
 
@@ -865,7 +864,7 @@ VRF-EVPN.evpn.0: 8 destinations, 8 routes (8 active, 0 holddown, 0 hidden)
                 Primary Routing Table: bgp.evpn.0
                 Thread: junos-main
 ```
-With the route type 5, the natural move is excluding the inet-vpn family in the backbone, to test the reliability, let's test the routing without inet-vpn configured. 
+With the Type 5 route now handling the L3 prefix, the natural next step is to completely exclude the inet-vpn family from the backbone. To test the reliability and prove EVPN can carry the routing alone, let's deactivate the inet-vpn session across the core and run a continuous ping.
 ```
 [admin@CE12-1] > ping 10.16.34.34
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -917,9 +916,9 @@ VRF-EVPN.inet.0: 5 destinations, 6 routes (5 active, 0 holddown, 0 hidden)
                     >  to 10.200.0.1 via ae0.0, Push 504, Push 35(top)
                        to 10.200.0.3 via ge-0/0/2.0, Push 504, Push 36(top)
 ```
-Here we can see an example of migration from L3VPN to L3-EVPN, the customer lost only a packet, and in the RIB we have the EVPN type 5 route installed. 
+Here we can see a perfect example of a live migration from L3VPN to L3-EVPN. The customer lost only a single packet during convergence, and we immediately see the EVPN Type 5 route installed as the active path in the RIB.
 
-Now, let's test the internet access of the Site 12:
+Now, let's verify internet access for CE12:
 ```
 [admin@CE12-1] > tool traceroute 200.1.0.1
 Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
@@ -931,9 +930,9 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
 5  10.200.0.23  0%      18  8.8ms   34.3  7.8   256.9  55
 6  200.1.0.1    0%      18  13.1ms  17.6  8     65.9   12.6
 ```
-Perfectly trough EVPN only!!! 
+Perfectly routed exclusively through EVPN!
 
-If we want to optimize the routing, we can export the MAC-IP routes into VRF also. Follow my tought here, R1 and R2 have connectivity with CE12-1, both of them haves the 10.16.12.0/24 configured into IRB interface and exporting this prefix to R3:
+If we want to optimize routing further, we can leak the MAC/IP routes directly into the VRF. Follow my logic here: both R1 and R2 have L2 connectivity with CE12-1. Both of them have the 10.16.12.0/24 subnet configured on their IRB interfaces, and both are exporting this /24 prefix up to R3:
 ```
 root@R3> show route 10.16.12.0/24
 
@@ -949,14 +948,14 @@ VRF-EVPN.inet.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
                     >  to 10.200.0.6 via ge-0/0/3.0, Push 250, Push 33(top)
                        to 10.200.0.11 via ge-0/0/4.0, Push 250, Push 33(top)
 ```
-If the connection between R1-CE fails, the IRB interface will not goes down, then R1 will export the prefix yet. To solve this possible issue, we can export the MAC-IP routes into VRF, to optimize this routing. 
+If the physical connection between R1 and the CE fails, the IRB interface itself will not go down, meaning R1 will continue to export the /24 prefix, potentially blackholing traffic. To solve this issue and establish optimal forwarding, we can export the specific MAC/IP routes into the VRF.
 
-We need to add a simple knob into EVPN instances:
+We just need to add a simple knob inside the EVPN routing instances:
 ```
 set routing-instances EVPN-CE12 protocols evpn remote-ip-host-routes
 set routing-instances EVPN-CE34 protocols evpn remote-ip-host-routes
 ```
-This knob makes the PE leak the MAC-IP routes from evpn rib, to the inet rib. This knob not allow the PE to generate type 5 routes, only do a local process to put the mac-ip routes into the inet rib. 
+This knob tells the PE to leak the MAC/IP routes from the evpn RIB down into the inet RIB of the VRF. Note that this does not generate a Type 5 route; it’s simply a local process that installs the host route (/32) into the local routing table to optimize forwarding.
 ```
 root@R3> show route 10.16.12.12
 ....
@@ -1009,8 +1008,8 @@ EVPN-CE34.evpn.0: 36 destinations, 36 routes (36 active, 0 holddown, 0 hidden)
                 Primary Routing Table: bgp.evpn.0
                 Thread: junos-main
 ```
-Basically, we can route the traffic for a specific IP trough the L2-EVPN!!! 
+By doing this, we can actively route traffic to a specific /32 host IP through the L2-EVPN foundation!
 
-All of our goals was accomplished today. I like so much write this text and explore the features of EVPN. I expect that you liked it also. 
+All of our goals were accomplished today! I really enjoyed writing this article and exploring the incredible features of EVPN. I hope you enjoyed reading it too.
 
-See you soon in the inter-as VPNs!!! Bye. 
+See you soon in the next post about Inter-AS VPNs! Bye.
