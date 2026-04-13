@@ -1,11 +1,11 @@
 # L2VPN Configuration
 
-Hello guys, this time we'll configure the L2VPNs!!! In Junos, the VPWS was refered as L2VPN, despite VPLS is a L2VPN also. Today, we'll configure the VPWS connection in the two models, Kompella and Martini! 
+Hello guys! This time we'll configure some L2VPNs! In Junos, VPWS is historically referred to simply as l2vpn in the configuration hierarchy, even though VPLS is also a type of L2VPN. Today, we'll configure VPWS connections using both models: Kompella and Martini!
 
-The topology that we'll follow is here: 
+Here is the topology we'll be following:
 <img width="987" height="821" alt="image" src="https://github.com/user-attachments/assets/f2aaab60-af94-4b3d-bb83-14d5921f2366" />
 
-First of all, let's clarify all the circuits:
+First of all, let's map out all the circuits:
 | Customer | Site | Router | Protocol | PE-CE Interface | VLAN    | Circuit | PE  |
 | ------- | ---- | ------ | ----------- | ------------------- | ------- | ------------ | --- |
 | C4      | S1   | CE4-1  | LDP         | ge-0/0/7            | 412,413 | S1-S2, S1-S3 | R1  |
@@ -15,15 +15,15 @@ First of all, let's clarify all the circuits:
 | C5      | S2   | CE5-2  | BGP         | ge-0/0/1            | 512,523 | S1-S2, S2-S3 | R3  |
 | C5      | S3   | CE5-3  | BGP         | ge-0/0/8            | 513,523 | S1-S3, S2-S3 | R5  |
 
-With this, we can follow to the configuration. 
+With that out of the way, we can jump into the configuration.
 
-Our goal is ensure the full connectivity between the sites, in other words, the customer wants a fully-mesh connection. 
+Our goal is to ensure full connectivity between the sites. In other words, the customer wants a full-mesh topology.
 
-This article will be very simple, and I will configure only one circuit of each customer to show you. 
+This article will be very straightforward. I will walk you through the configuration of one circuit for each customer as an example.
 
-Let's start on CE4-1 to CE4-2 circuit, using the VLAN 412. 
+Let's start with the CE4-1 to CE4-2 circuit, using VLAN 412.
 
-First, let's configure the interface: 
+First, let's configure the PE-CE interface:
 ```
 set interfaces ge-0/0/7 description to-CE4-1
 set interfaces ge-0/0/7 flexible-vlan-tagging
@@ -32,10 +32,10 @@ set interfaces ge-0/0/7 unit 412 description S1-S2
 set interfaces ge-0/0/7 unit 412 encapsulation vlan-ccc
 set interfaces ge-0/0/7 unit 412 vlan-id 412
 ```
-With this, we are tagging the VLAN in the PE-CE interface. 
+With this, we are properly tagging the VLAN on the PE-CE interface.
 
-Now, we need to transport this layer 2 segment across the network, trough the VPWS. In Junos, the VPWS Martini is referred as L2CKT. 
-Let's configure this: 
+Now, we need to transport this Layer 2 segment across the network through the VPWS. In Junos, the Martini VPWS draft is referred to as l2circuit.
+Let's configure it:
 ```
 set protocols l2circuit neighbor 10.0.0.8 interface ge-0/0/7.412 virtual-circuit-id 412
 set protocols l2circuit neighbor 10.0.0.8 interface ge-0/0/7.412 description S1-S2
@@ -44,7 +44,7 @@ set protocols l2circuit neighbor 10.0.0.8 interface ge-0/0/7.412 flow-label-rece
 set protocols l2circuit neighbor 10.0.0.8 interface ge-0/0/7.412 mtu 1500
 set protocols l2circuit neighbor 10.0.0.8 interface ge-0/0/7.412 encapsulation-type ethernet-vlan
 ```
-The mandatory parameters is: virtual-circuit-id, without vc-id we can't commit the configuration. In the LDP FEC 128 message, that contains the L2CKT data, we have encapsulation, MTU and VLAN information, these parameters must be matched to establish the VPWS. With any mismatch the circuit will be down and Junos will set the issue with some flags: 
+The mandatory parameter here is the virtual-circuit-id; without the vc-id, we can't even commit the configuration. The LDP FEC 128 message, which signals the L2CKT, contains encapsulation, MTU, and VLAN information. These parameters must match on both ends to establish the VPWS. If there is any mismatch, the circuit will stay down, and Junos will flag the issue in the output:
 ```
 Legend for connection status (St)
 EI -- encapsulation invalid      NP -- interface h/w not present
@@ -60,7 +60,7 @@ LD -- local site signaled down   RS -- remote site standby
 RD -- remote site signaled down  HS -- Hot-standby Connection
 XX -- unknown
 ```
-Now, we can configure similary on the R8 and check the cicrcuit status: 
+Now, we can configure R8 similarly and check the circuit status on R1:
 ```
 root@R1> show l2circuit connections interface ge-0/0/7.412
 Layer-2 Circuit Connections:
@@ -92,11 +92,11 @@ Neighbor: 10.0.0.8
         Description: S1-S2
       Flow Label Transmit: Yes, Flow Label Receive: Yes
 ```
-And... it's ok!!!
+And... it's up and running!
 
-To finish the delivery of this service, we can apply the same logic in the other PEs of the Customer 4. Let's go and ask the customer to check the connectivity. 
+To finish delivering this service, we just apply the exact same logic to the other PEs for Customer 4. Once that's done, let's ask the customer to test the connectivity.
 
-I can check on R1 both circuits, to Site 2 and Site 3. 
+We can verify both circuits on R1 (pointing to Site 2 and Site 3):
 ```
 Layer-2 Circuit Connections:
 
@@ -136,9 +136,9 @@ Neighbor: 10.0.0.8
         Description: S1-S2
       Flow Label Transmit: Yes, Flow Label Receive: Yes
 ```
-Finally, let's see the customer connection test: 
+Finally, let's look at the customer's connectivity tests.
 
-Site 1 has connection with Site 2 and Site 3:
+Site 1 can reach Site 2 and Site 3:
 ```
 [admin@CE4-1] > ping 172.4.12.1
   SEQ HOST                                     SIZE TTL
@@ -157,7 +157,7 @@ Site 1 has connection with Site 2 and Site 3:
    avg-rtt=15ms729us max-rtt=21ms61us
 
 ```
-And Site 2 has connection with Site 3 also! 
+And Site 2 has full connectivity with Site 3 as well!
 ```
 [admin@CE4-2] > ping 172.4.23.3
   SEQ HOST                                     SIZE TTL
@@ -167,9 +167,9 @@ And Site 2 has connection with Site 3 also!
    min-rtt=11ms365us avg-rtt=30ms230us
    max-rtt=49ms95us
 ```
-Ok!!! The service is delivered with success!!! 
+Awesome! The service was delivered successfully!
 
-The final configuration in the PEs is here: 
+For reference, here is the final configuration for the Customer 4 PEs:
 R1:
 ```
 set interfaces ge-0/0/7 description to-CE4-1
@@ -243,13 +243,13 @@ set protocols l2circuit neighbor 10.0.0.6 interface ge-0/0/7.413 mtu 1500
 set protocols l2circuit neighbor 10.0.0.6 interface ge-0/0/7.413 encapsulation-type ethernet-vlan
 ```
 
-Ok, you see that Martini VPWS was very easy, right? I think Martini is more simple and objective to configure, but with BGP we can spare some LDP connections, and turn all the things more scalable. The label information of VPWS Kompella is changed by BGP, and in the VPWS Martini the label information is changed by LDP FEC 128 message, that need a LDP peering between the PEs, fortunately Junos try to establish the T-LDP (Target LDP) peering when you configure a VPWS or VPLS Martini, in other vendors could be necessary a manual T-LDP configuration, that is more painful. 
+Okay, you can see that Martini VPWS is very easy, right? I think Martini is simpler and more straightforward to configure. However, using BGP (Kompella), we can spare some LDP sessions and make the architecture much more scalable. In Kompella VPWS, the label information is exchanged via BGP. In Martini VPWS, the label information is exchanged via LDP FEC 128 messages, which requires an LDP peering between the PEs. Fortunately, Junos automatically tries to establish a Targeted LDP (T-LDP) session when you configure a Martini VPWS or VPLS. In other vendors, you might need to configure the T-LDP session manually, which is a bit more painful!
 
-Everything is cleared here? I think so. 
+Is everything clear so far? I hope so!
 
-Let's go to the final part of this delivery. 
+Let's move on to the final part of this delivery: the Kompella model for Customer 5.
 
-First things first. We need to enable the l2vpn signalling in our BGP mesh. 
+First things first. We need to enable l2vpn signaling in our BGP mesh.
 RR:
 ```
 set protocols bgp group iBGP-AS65020-East family l2vpn signaling nexthop-resolution no-resolution
@@ -264,7 +264,7 @@ or
 set protocols bgp group iBGP-AS65020-West family l2vpn signaling
 ```
 
-Now, with full connectivity, let's configure the VPWS on PEs, this time I'll apply the configuration on R7, but here I'll configure the two remote site in one time! 
+Now, with the BGP families ready, let's configure the VPWS on the PEs. This time I'll apply the configuration on R7, but notice how we can configure the connections to both remote sites within the same routing instance!
 ```
 set interfaces ge-0/0/7 description to-CE5-1
 set interfaces ge-0/0/7 flexible-vlan-tagging
@@ -288,10 +288,10 @@ set routing-instances L2VPN-CE5-S1 interface ge-0/0/7.513
 set routing-instances L2VPN-CE5-S1 route-distinguisher 10.0.0.7:5
 set routing-instances L2VPN-CE5-S1 vrf-target target:65020:5
 ```
-Pay attention on the configuration here, I have a local-site identifier, and I can specify multiple remote-site identifiers in the site configuration. You got it? We can configure the full mesh connectivity in a easier way than VPWS Martini!!! The unique problem, is documenting the site-id, but I trust you, you can do it. 
+Pay close attention to the configuration here: I define a site-identifier and then specify multiple remote-site-ids within the same site configuration. Catch the drift? We can configure full-mesh connectivity in a much cleaner way than with Martini VPWS! The only catch is keeping good documentation of your site-IDs, but I trust you guys can handle that.
 
-Ok, with this defined, our router will advertise the bgp.l2vpn route to RR and if our remote PE have the correct RT configured, it will receive the route and the opposite will happens also. 
-Let's check this:
+Okay, with this set up, our router will advertise the bgp.l2vpn.0 route to the RR. If our remote PE has the correct Route Target configured, it will import the route, and vice versa.
+Let's verify this:
 ```
 root@R7> show route table L2VPN-CE5-S1.
 
@@ -364,9 +364,9 @@ L2VPN-CE5-S1.l2id.0: 4 destinations, 8 routes (4 active, 0 holddown, 0 hidden)
                        to 10.200.0.23 via ge-0/0/4.0, Push 89
 
 ```
-In the routing tables, we can see all L2VPN routes. The structure of the route is basically ```router-id:site-id:label-block/96```. When a router receive the route of the remote PE, it knows how to forward the traffic, and what label use to forward this VPN traffic. Sure, here all the things is simplificated to the operator see that, but, basically, when the route is received with a RT of some routing-instance, these routes is injected into the ```L2VPN.l2id.0``` table. And the sites are identified accordingly. 
+In the routing tables, we can see all the L2VPN routes. The structure of the route is basically ```router-id:site-id:label-block/96```. When a router receives the route from the remote PE, it knows how to forward the traffic and which label to use. Of course, the CLI simplifies the output for the operator, but basically, when a route is received with an RT matching a local routing instance, it gets injected into the ```L2VPN-CE5-S1.l2id.0``` table, and the sites are identified accordingly.
 
-With all the routes received, we can check the circuit status: 
+With all routes received, we can check the circuit status: 
 ```
 root@R7> show l2vpn connections
 Layer-2 VPN connections:
@@ -410,10 +410,10 @@ Edge protection: Not-Primary
       Local interface: ge-0/0/7.513, Status: Up, Encapsulation: VLAN
       Flow Label Transmit: No, Flow Label Receive: No
 ```
-And... Voilà!!! All the sites are connected, with the L2VPN routes received I know that all sites are configured correctly. 
+And... Voilà! All sites are connected. Seeing those L2VPN routes imported successfully confirms that the sites are configured correctly.
 
-Let's ask the customer to check the connectivity between the sites: 
-Site 1 with Site 2 and 3:
+Let's ask the customer to test the connectivity between the sites:
+Site 1 to Site 2 and 3:
 ```
 [admin@CE5-1] > ping 172.5.12.2
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -432,7 +432,7 @@ Site 1 with Site 2 and 3:
    max-rtt=35ms860us
 
 ```
-Site 2 with Site 3:
+Site 2 to Site 3:
 ```
 [admin@CE5-2] > ping 172.5.23.3
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -442,10 +442,8 @@ Site 2 with Site 3:
     sent=3 received=3 packet-loss=0% min-rtt=7ms671us avg-rtt=20ms476us
    max-rtt=42ms375us
 ```
-OK! 
+OK! Our goal is accomplished once again.
 
-Our goal is accomplished more on time. 
+In the next article, I'll dive into VPLS configuration. If you want a fun lab idea to mess around with, try mixing L2CKTs and VPLS together, since they both use LDP FEC 128 messages! I won't say more about it right now; I just want to plant that seed in your mind, hahahah.
 
-In the next article I'll made the VPLS configuration. If you want to imagine some jokes to do, you can use L2CKTs and VPLS together, since they both use LDP FEC 128 messages! I won't say more about this, I only want to plant the idea in your mind, hahahah. 
-
-See you soon! 
+See you soon!
