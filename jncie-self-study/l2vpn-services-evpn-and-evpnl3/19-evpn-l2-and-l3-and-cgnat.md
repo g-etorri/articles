@@ -757,7 +757,260 @@ set routing-instances VRF-EVPN vrf-target target:65020:12341
 set routing-instances VRF-EVPN vrf-table-label
 ```
 
-With this, we already have connectivity in the sites to internet. Let's check: 
+To show you the difference between this VRF and the L3VPN VRF, when you want to see the routes from a VRF, if you not complete the command with inet.0 ou bgp.l3vpn.0, Junos shows both tables, the primary table that is bgp.l3vpn.0 and the secondary table, where the Junos put the inet routes correctly. 
 ```
+root@R1> show route table VRF-C2-SPOKE detail
 
+VRF-C2-SPOKE.inet.0: 20 destinations, 25 routes (19 active, 0 holddown, 6 hidden)
+10.2.0.3/32 (2 entries, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.4:201
+....
+                Communities: target:65020:201 src-as:65020:0 rt-import:10.0.0.4:10
+....
+                Primary Routing Table: bgp.l3vpn.0
+....
 ```
+In a L3-EVPN, we can exchange the routes trough the evpn family, and if we have the inet-vpn enable, we can exchange the routes trough this family also, check here: 
+```
+root@R1> show route table VRF-EVPN. detail
+
+VRF-EVPN.inet.0: 6 destinations, 13 routes (6 active, 0 holddown, 0 hidden)
+0.0.0.0/0 (2 entries, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.3:12341
+....
+                Communities: target:65020:12341
+....
+                Primary Routing Table: bgp.l3vpn.0
+....
+         EVPN   Preference: 170/-101
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x1ccf0614
+                Next-hop reference count: 3
+                Kernel Table Id: 0
+                Next hop type: Router, Next hop index: 0
+                Next hop: 10.200.0.1 via ae0.0 weight 0x1, selected
+                Label operation: Push 35
+                Label TTL action: no-prop-ttl
+                Load balance label: Label 35: None;
+                Label element ptr: 0x8d88358
+                Label parent element ptr: 0x0
+                Label element references: 13
+                Label element child references: 11
+                Label element lsp id: 0
+                Session Id: 0
+                Next hop: 10.200.0.3 via ge-0/0/2.0 weight 0xf000
+                Label operation: Push 36
+                Label TTL action: no-prop-ttl
+                Load balance label: Label 36: None;
+                Label element ptr: 0x1c8e1030
+                Label parent element ptr: 0x0
+                Label element references: 13
+                Label element child references: 11
+                Label element lsp id: 0
+                Session Id: 0
+                Protocol next hop: 10.0.0.3
+                Label operation: Push 504
+                Label TTL action: no-prop-ttl
+                Load balance label: Label 504: None;
+                Composite next hop: 0x1c8a1d18 - INH Session ID: 0
+                Composite next hop: CNH non-key opaque: 0x0, CNH key opaque: 0x84a5fd0
+                Indirect next hop: 0x80e4350 - INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Int Ext Changed>
+                Inactive reason: Route Metric, BGP vs. non-BGP
+                Age: 5:49       Metric2: 15
+                Validation State: unverified
+                Localpref: 100
+                Task: VRF-EVPN-EVPN-L3-context
+                AS path: I  (Atomic Originator)
+                Aggregator: 65020 10.0.0.3
+                Cluster list:  0.0.0.2
+                Originator ID: 10.0.0.3
+                Thread: junos-main
+
+VRF-EVPN.evpn.0: 8 destinations, 8 routes (8 active, 0 holddown, 0 hidden)
+5:10.0.0.3:12341::0::0.0.0.0::0/248 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.3:12341
+                Next hop type: Indirect, Next hop index: 0
+                Address: 0x1ccee414
+                Next-hop reference count: 6
+                Kernel Table Id: 0
+                Source: 10.0.0.0
+                Protocol next hop: 10.0.0.3
+                Label operation: Push 504
+                Label TTL action: prop-ttl
+                Load balance label: Label 504: None;
+                Indirect next hop: 0x2 no-forward INH Session ID: 0
+                Indirect next hop: INH non-key opaque: 0x0 INH key opaque: 0x0
+                State: <Secondary Active Int Ext>
+                Local AS: 65020 Peer AS: 65020
+                Age: 10:37      Metric2: 15
+                Validation State: unverified
+                Task: BGP_65020.10.0.0.0
+                Announcement bits (1): 0-VRF-EVPN-EVPN-L3-context
+                AS path: I  (Atomic Originator)
+                Aggregator: 65020 10.0.0.3
+                Cluster list:  0.0.0.2
+                Originator ID: 10.0.0.3
+                Communities: target:65020:12341
+                Import Accepted
+                Route Label: 504
+                Overlay gateway address: 0.0.0.0
+                ESI 00:00:00:00:00:00:00:00:00:00
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Primary Routing Table: bgp.evpn.0
+                Thread: junos-main
+```
+With the route type 5, the natural move is excluding the inet-vpn family in the backbone, to test the reliability, let's test the routing without inet-vpn configured. 
+```
+[admin@CE12-1] > ping 10.16.34.34
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 10.16.34.34                                56  62 3ms838us
+    1 10.16.34.34                                56  62 4ms39us
+    2 10.16.34.34                                56  62 17ms644us
+    3 10.16.34.34                                56  62 2ms454us
+    4 10.16.34.34                                56  62 4ms348us
+    5 10.16.34.34                                56  62 5ms234us
+    6 10.16.34.34                                56  62 5ms157us
+    7 10.16.34.34                                56  62 8ms772us
+    8 10.16.34.34                                56  62 4ms48us
+    9 10.16.34.34                                56  62 4ms749us
+   10 10.16.34.34                                                  timeout
+   11 10.16.34.34                                56  62 3ms100us
+   12 10.16.34.34                                56  62 6ms434us
+   13 10.16.34.34                                56  62 6ms315us
+   14 10.16.34.34                                56  62 3ms541us
+   15 10.16.34.34                                56  62 9ms149us
+   16 10.16.34.34                                56  62 5ms488us
+    sent=17 received=16 packet-loss=5% min-rtt=2ms454us avg-rtt=5ms894us max-rtt=17ms644us
+
+root@R1> show route 10.16.34.34
+....
+VRF-EVPN.inet.0: 7 destinations, 15 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.16.34.34/32     *[BGP/170] 00:00:20, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.3 via ge-0/0/2.0, Push 274
+                    [BGP/170] 00:00:21, localpref 100, from 10.0.0.0
+                      AS path: I, validation-state: unverified
+                    >  to 10.200.0.1 via ae0.0, Push 504, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 504, Push 36(top)
+....
+root@R1> configure
+root@R1# edit protocols bgp group iBGP-AS65020-West
+[edit protocols bgp group iBGP-AS65020-West]
+root@R1# deactivate family inet-vpn
+[edit protocols bgp group iBGP-AS65020-West]
+root@R1# commit and-quit
+....
+root@R1> show route 10.16.34.34
+....
+VRF-EVPN.inet.0: 5 destinations, 6 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.16.34.0/24      *[EVPN/170] 00:00:02
+                    >  to 10.200.0.1 via ae0.0, Push 504, Push 35(top)
+                       to 10.200.0.3 via ge-0/0/2.0, Push 504, Push 36(top)
+```
+Here we can see an example of migration from L3VPN to L3-EVPN, the customer lost only a packet, and in the RIB we have the EVPN type 5 route installed. 
+
+Now, let's test the internet access of the Site 12:
+```
+[admin@CE12-1] > tool traceroute 200.1.0.1
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV
+#  ADDRESS      LOSS  SENT  LAST    AVG   BEST  WORST  STD-DEV
+1  10.16.12.2   0%      18  4.9ms   11.2  1.8   91     20.1
+2  172.16.3.9   0%      18  8.5ms   28.9  3.1   311.9  70
+3  172.16.3.10  0%      18  1.9ms   3.7   1.9   7.9    1.5
+4  172.16.3.13  0%      18  5.5ms   16.7  4     93.7   21.2
+5  10.200.0.23  0%      18  8.8ms   34.3  7.8   256.9  55
+6  200.1.0.1    0%      18  13.1ms  17.6  8     65.9   12.6
+```
+Perfectly trough EVPN only!!! 
+
+If we want to optimize the routing, we can export the MAC-IP routes into VRF also. Follow my tought here, R1 and R2 have connectivity with CE12-1, both of them haves the 10.16.12.0/24 configured into IRB interface and exporting this prefix to R3:
+```
+root@R3> show route 10.16.12.0/24
+
+inet.0: 234 destinations, 241 routes (225 active, 0 holddown, 9 hidden)
+
+VRF-EVPN.inet.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.16.12.0/24      *[EVPN/170] 00:00:10
+                    >  to 10.200.0.6 via ge-0/0/3.0, Push 240
+                       to 10.200.0.11 via ge-0/0/4.0, Push 240, Push 35(top)
+                    [EVPN/170] 00:05:39
+                    >  to 10.200.0.6 via ge-0/0/3.0, Push 250, Push 33(top)
+                       to 10.200.0.11 via ge-0/0/4.0, Push 250, Push 33(top)
+```
+If the connection between R1-CE fails, the IRB interface will not goes down, then R1 will export the prefix yet. To solve this possible issue, we can export the MAC-IP routes into VRF, to optimize this routing. 
+
+We need to add a simple knob into EVPN instances:
+```
+set routing-instances EVPN-CE12 protocols evpn remote-ip-host-routes
+set routing-instances EVPN-CE34 protocols evpn remote-ip-host-routes
+```
+This knob makes the PE leak the MAC-IP routes from evpn rib, to the inet rib. This knob not allow the PE to generate type 5 routes, only do a local process to put the mac-ip routes into the inet rib. 
+```
+root@R3> show route 10.16.12.12
+....
+VRF-EVPN.inet.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.16.12.0/24      *[EVPN/170] 00:03:58
+                    >  to 10.200.0.6 via ge-0/0/3.0, Push 240
+                       to 10.200.0.11 via ge-0/0/4.0, Push 240, Push 35(top)
+                    [EVPN/170] 00:01:03
+                    >  to 10.200.0.6 via ge-0/0/3.0, Push 250, Push 33(top)
+                       to 10.200.0.11 via ge-0/0/4.0, Push 250, Push 33(top)
+....
+set routing-instances EVPN-CE34 protocols evpn remote-ip-host-routes
+....
+root@R3> show route 10.16.12.12
+....
+VRF-EVPN.inet.0: 10 destinations, 11 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.16.12.12/32     *[EVPN/7] 00:01:15
+                    >  via irb.1234
+....
+root@R3> show route table EVPN-CE34.evpn.0 match-prefix *10.16.12.12* detail
+
+EVPN-CE34.evpn.0: 36 destinations, 36 routes (36 active, 0 holddown, 0 hidden)
+2:10.0.0.1:1234::1234::50:ea:05:00:1c:00::10.16.12.12/304 MAC/IP (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.1:1234
+....
+                Communities: target:65020:1234
+                Import Accepted
+                Route Label: 287
+                ESI: 00:00:00:00:00:00:00:00:00:01
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Primary Routing Table: bgp.evpn.0
+                Thread: junos-main
+
+2:10.0.0.2:1234::1234::50:ea:05:00:1c:00::10.16.12.12/304 MAC/IP (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Route Distinguisher: 10.0.0.2:1234
+....
+                Communities: target:65020:1234
+                Import Accepted
+                Route Label: 277
+                ESI: 00:00:00:00:00:00:00:00:00:01
+                Localpref: 100
+                Router ID: 10.0.0.0
+                Primary Routing Table: bgp.evpn.0
+                Thread: junos-main
+```
+Basically, we can route the traffic for a specific IP trough the L2-EVPN!!! 
+
+All of our goals was accomplished today. I like so much write this text and explore the features of EVPN. I expect that you liked it also. 
+
+See you soon in the inter-as VPNs!!! Bye. 
