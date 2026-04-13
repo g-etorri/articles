@@ -1,12 +1,12 @@
 # VPLS Configuration
 
-Hello guys, I expect everyone is fine today! Here I am again, to bring to you another article, now about VPLSs!!! 
+Hello guys, I hope everyone is doing well today! I'm back with another article, and this time we're diving into VPLS!
 
-The topology that we'll use today is here:
+Here is the topology we'll be using today:
 <img width="1928" height="1148" alt="image" src="https://github.com/user-attachments/assets/52d5e7af-1bef-48f5-ac4f-1d18b949e8e9" />
-You can notice that we have two multi-homed sites, this is to explain to you how do this. We can configure multihomed sites in VPLS signalled via LDP or BGP. 
+You might notice that we have two multi-homed sites. I set it up this way to show you exactly how to handle them. We can configure multi-homed sites in VPLS signaled via both LDP and BGP.
 
-First, let's clarify the configuration with this table:
+First, let's map out the configuration with this table:
 | Customer | Site | Router | Protocol | PE-CE Interface | VLAN | PE |
 | ------- | ---- | ------ | ----------- | ------------------- | -------- | ------ |
 | C5      | S4   | CE5-4  | BGP         | ge-0/0/8            | 500, 501 | R2     |
@@ -16,11 +16,11 @@ First, let's clarify the configuration with this table:
 | C6      | S2   | CE6-2  | LDP         | ge-0/0/5, ge-0/0/8  | 600, 601 | R8, R7 |
 | C6      | S3   | CE6-3  | LDP         | ge-0/0/6            | 600, 601 | R6     |
 
-First, let's configure the Customer 5 VPLS, the Kompella VPLS. This time we don't need to configure anything on the backbone, the VPLS will use the l2vpn family to exchange the information. 
+Let's start by configuring the VPLS for Customer 5 using the Kompella draft. This time we don't need to touch the backbone configuration; the VPLS will use the l2vpn BGP family to exchange information.
 
-Another detail that we have here, in each connection we have two VLANs, to mantain two different broadcast domain, let's made a VPLS in VLAN-AWARE mode that separate each broadcast domain of the VPLS. Let's go. 
+Another detail to note: on each connection, we have two VLANs to maintain two separate broadcast domains. We'll configure the VPLS in VLAN-AWARE mode to keep these broadcast domains isolated within the VPLS. Let's get to it.
 
-Starting on R2, the configuration is:
+Starting on R2, here is the configuration:
 ```
 set interfaces ge-0/0/8 description to-CE5-4
 set interfaces ge-0/0/8 flexible-vlan-tagging
@@ -45,10 +45,11 @@ set routing-instances VPLS-CE5 vrf-target target:65020:500
 
 set protocols bgp group iBGP-AS65020-East family l2vpn signaling
 ```
-Note: The command ```vlan-id all``` specify the VPLS in vlan-aware mode. Here we have similar elements that we have in the VPWS Kompella. The ```no-tunnel-services``` knob creates a LSI/VT interface, avoiding use the lt interfaces. 
+Note: The ```vlan-id all``` command configures the VPLS for VLAN-aware mode. You'll notice some similar elements to what we used in Kompella VPWS. The ```no-tunnel-services``` knob tells the router to dynamically create an LSI/VT interface, avoiding the need for dedicated physical loopback (lt) interfaces.
 
-We can apply the same logic in the other PEs of the network. To avoid layer 2 loops, the configuration of the multihomed sites needs to be specials. Let's check the VPLS connections now, then configure the multihomed site to give more attention.
-In the BGP, we'll receive the route from Site 6:
+We can apply this same logic across the other PEs in the network. However, to avoid Layer 2 loops, the configuration for multi-homed sites requires special attention. Let's check the VPLS connections first, and then we'll focus on configuring the multi-homed sites.
+
+In our BGP table, we can see the route received from Site 6:
 ```
 root@R2> show route table VPLS-CE5.l2vpn.0 detail
 
@@ -100,7 +101,7 @@ VPLS-CE5.l2vpn.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
                 Primary Routing Table: bgp.l2vpn.0
                 Thread: junos-main
 ```
-Here we can see the label-base, the range and the offset, this is used to know what label we need to use to forward the traffic to this site. With this, the Junos automatically create the VPLS connection:
+Here we can see the label-base, the block range, and the offset. The router uses this data to calculate which label is needed to forward traffic to this specific site. With this information, Junos automatically provisions the VPLS connection:
 ```
 root@R2> show vpls connections
 Layer-2 VPN connections:
@@ -140,7 +141,7 @@ Edge protection: Not-Primary
         Description: Intf - vpls VPLS-CE5 local site 4 remote site 6
       Flow Label Transmit: No, Flow Label Receive: No
 ```
-We can see the flags that Junos can set if the circuit has some problem. Like the L2CKT flags that I show in the previous article. Now, the main difference between VPLS and VPWS, in the VPWS we don't have mac learning and we can't have more than one peer, logically. With VPLS, we have the mac learning enabled, this way we can differenciate the source of the MAC address, and with this, we can have multiple peers. Let's check the mac-table of the VPLS:
+The output shows the flags Junos might set if the circuit encounters an issue—very similar to the l2circuit flags we saw in the previous article. Now, for the main difference between VPLS and VPWS: in VPWS, there is no MAC learning and you logically only have one peer. In VPLS, MAC learning is enabled! This allows the router to learn the source MAC addresses and dynamically forward traffic across a multi-point topology. Let's check the VPLS MAC table:
 ```
 root@R2> show vpls mac-table
 
@@ -164,13 +165,13 @@ Routing instance : VPLS-CE5
    50:9d:8c:00:25:00   D                ge-0/0/8.501
    50:d6:06:00:32:00   D                vt-0/0/0.1048576
 ```
-We can see here the vt interface, that is basically an virtual-interface that represents the push of the VPLS label. And other important thing, the two different mac-tables! Here we can confirm that our vlan-aware mode is working perfectly!  
+Notice the ```vt``` interface in the output. This is essentially a virtual interface that represents the pushing of the VPLS label. Another crucial detail: there are two separate MAC tables! This confirms that our VLAN-aware mode is working perfectly, isolating the broadcast domains.
 
-Before ask the customer to give us some tests, let's finish the service configuration with the multihomed site. Let's go! 
+Before we ask the customer to run tests, let's wrap up the service provisioning by configuring the multi-homed site.
 
-If you remember the JNCIP-SP studies, in the VPLS Kompella the multihomed is not active-active, but active-standby, only one PE will be the traffic forwarder to the customer, and this is defined by the local-preference value of the routes. Let's see it. 
+If you remember your JNCIP-SP studies, multi-homing in Kompella VPLS isn't active-active; it operates in an active-standby mode. Only one PE will actively forward traffic to the customer site, and the active forwarder is elected based on the BGP local-preference value attached to the routes. Let's see it in action.
 
-In R3, all the logic of the VPLS configuration is the same, but we are including the ```multi-homing``` and the ```site-preference``` knob into the VPLS configuration:
+On R3, the core logic of the VPLS remains the same, but we are introducing the ```multi-homing``` and ```site-preference``` knobs under the VPLS protocol hierarchy:
 ```
 set interfaces ge-0/0/8 description to-CE5-5
 set interfaces ge-0/0/8 flexible-vlan-tagging
@@ -196,7 +197,7 @@ set routing-instances VPLS-CE5 route-distinguisher 10.0.0.3:500
 set routing-instances VPLS-CE5 vrf-target target:65020:500
 set protocols bgp group iBGP-AS65020-East family l2vpn signaling
 ```
-In R4, we'll do the same, but changing the ```site-preference``` to backup:
+On R4, we'll do the exact same thing, but we'll change the ```site-preference``` to ```backup```:
 ```
 set interfaces ge-0/0/6 description to-CE5-5
 set interfaces ge-0/0/6 flexible-vlan-tagging
@@ -221,7 +222,7 @@ set routing-instances VPLS-CE5 interface ge-0/0/6.501
 set routing-instances VPLS-CE5 route-distinguisher 10.0.0.4:500
 set routing-instances VPLS-CE5 vrf-target target:65020:500
 ```
-Now, let's check the routes: 
+Now, let's inspect the routes:
 ```
 root@R2> show route table VPLS-CE5.l2vpn.0 detail match-prefix *:500:5:1*
 
@@ -282,9 +283,9 @@ VPLS-CE5.l2vpn.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
                 Primary Routing Table: bgp.l2vpn.0
                 Thread: junos-main
 ```
-Note the local-preference that is the site preference, this way the R2 can know what is the PE designated as forwarder. Now, let's check the connections on the R3 and R4! 
+Notice that the ```site-preference``` translates directly into the BGP local-preference. This allows remote routers to determine which PE is the designated forwarder for that site. Now, let's verify the connections on R3 and R4!
 
-In R3, we can note that we have the other two sites at UP State, but we can note that we have the Site 5 also. This happens because R3 is receiving the route of R4 that have the Site 5, and the flag is RN, that is Remote Site Not Designed, basically, the R4 is not the traffic forwarder of this site. 
+On R3, we can see that the connections to the other two sites are in the Up state, but strangely, Site 5 also appears in the list as a remote connection! This happens because R3 is receiving the VPLS route generated by R4 (which also represents Site 5). However, note the RN flag (Remote Site Not Designated). This indicates that R4 is not the active traffic forwarder for this site.
 ```
 root@R3> show vpls connections
 Layer-2 VPN connections:
@@ -331,7 +332,7 @@ Edge protection: Not-Primary
         Description: Intf - vpls VPLS-CE5 local site 5 remote site 6
       Flow Label Transmit: No, Flow Label Receive: No
 ```
-Now, let's check the R4: 
+Now, let's check R4: 
 ```
 root@R4> show vpls connections
 Layer-2 VPN connections:
@@ -368,9 +369,9 @@ Edge protection: Not-Primary
     5                         rmt   LN
     6                         rmt   LN
 ```
-The connection with all the sites are with the flag LN, Local Site Not Designed, that is, R4 is not the traffic forwarder of the Site 5. This configuration ensures that we don't have any layer 2 loop here caused by the multihomed connection. 
+All connections on R4 show the LN flag (Local Site Not Designated). This confirms that R4 is acting as the standby and is not forwarding traffic for Site 5. This election mechanism strictly prevents any Layer 2 loops that could be caused by the multi-homed connection.
 
-Let's check the final mac-table and ask the customer to send us some tests: 
+Let's check the final MAC table and ask the customer to run some pings:
 ```
 root@R3> show vpls mac-table
 
@@ -398,7 +399,7 @@ Routing instance : VPLS-CE5
    50:d6:06:00:32:00   D                vt-0/0/0.1048833
    aa:bb:cc:00:04:00   D                ge-0/0/8.501
 ```
-Here we have the Site 5 with connection with the other sites in the network:
+As expected, Site 5 has full connectivity with the other sites in the network:
 ```
 [admin@CE5-5] > ping 172.50.0.4
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -414,11 +415,11 @@ Here we have the Site 5 with connection with the other sites in the network:
     2 172.50.0.6                                 56  64 9ms564us
     sent=3 received=3 packet-loss=0% min-rtt=8ms974us avg-rtt=10ms612us max-rtt=13ms300us
 ```
-And, mission accomplished here! Customer 5 with an excellent service. 
+Mission accomplished! Customer 5 is successfully provisioned.
 
-Now, let's to the VPLS Martini! Here the configuration is simple and objective, like L2CKTs. 
+Now, let's move on to the Martini VPLS! Just like L2CKTs, the configuration here is very simple and straightforward.
 
-I'm applying the configuration on R1, but we'll follow the same logic in the other PEs. Again, let the multihomed site without configuration to avoid loops.
+I'll apply the configuration on R1, but the same logic applies to the other PEs. Again, leave the multi-homed site out for now to avoid loops.
 ```
 set interfaces ge-0/0/9 description to-CE6-1
 set interfaces ge-0/0/9 flexible-vlan-tagging
@@ -441,9 +442,9 @@ set routing-instances VPLS-CE6 vlan-id all
 set routing-instances VPLS-CE6 interface ge-0/0/9.600
 set routing-instances VPLS-CE6 interface ge-0/0/9.601
 ```
-Here we need to define the same parameters that we have in the L2CKT, encapsulation, MTU and vpls-id needs to match, if not the VPLS will not be UP. I added the flow-label into the circuit to improve the load-balance of the traffic, is only a good practice. In the same logic of the VPLS Kompella, we'll use the vlan-aware mode of the VPLS, mantaining the broadcast domains separated. 
+Here we need to match the exact same parameters we discussed for L2CKTs: encapsulation, MTU, and vpls-id must be identical on all peers, otherwise the pseudowire won't come up. I added the flow-label configuration to improve traffic load-balancing across the core, it's just a good design practice. And just like we did with Kompella, we'll use VLAN-aware mode to keep the broadcast domains separated.
 
-Ok, with the configuration maded in the R1 and R6, let's check the outputs: 
+Alright, with R1 and R6 configured, let's check the status:
 ```
 root@R1> show vpls connections
 Layer-2 VPN connections:
@@ -485,7 +486,7 @@ Instance: VPLS-CE6
     10.0.0.8(vpls-id 6)       rmt   OL
     10.0.0.7(vpls-id 6)       rmt   OL
 ```
-Here we have the pseudowire to R6 established. Let's look at the LDP FEC 128 message now: 
+The pseudowire to R6 is established successfully. Let's take a look under the hood at the LDP FEC 128 message:
 ```
 root@R1> show ldp database session 10.0.0.6 l2circuit detail
 Input label database, 10.0.0.1:0--10.0.0.6:0
@@ -516,18 +517,18 @@ Labels advertised: 10
                 LSP ping
                 BFD with IP/UDP-encapsulation for Fault Detection
 ```
-In the LDP messages we can see the all the parameters, including MTU, flow-label bits, MTU, vpls-id/virtual-circuit-id and encapsulation. This is fantastic!!! 
+In the LDP message details, we can clearly see all the negotiated parameters, including the MTU, Flow Label bits, virtual-circuit-id, and encapsulation type. This level of visibility is fantastic for troubleshooting!
 
-Now, let's go to the multihomed site. 
+Now, let's tackle the multi-homed site for Customer 6.
 
-To mantain only one traffic forwarder in the VPLS, we need to establish the pseudowire to one router. I choose the R8, so on the R1 and R6 let's add the configuration: 
+To ensure we only have one active traffic forwarder in the VPLS, we want the active pseudowires to point to a single router. I've chosen R8 as the primary. So, on R1 and R6, let's add this configuration:
 ```
 set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.8 revert-time 30
 set routing-instances VPLS-CE6 protocols vpls neighbor 10.0.0.8 backup-neighbor 10.0.0.7 standby
 ```
-This way, the pseudowire to R8 and R7 will be established, but the pseudowire for R7 will be used only if the R8 pseudowire fails. The revert-time will revert the traffic to use to R8 pseudowire again after it goes up in X seconds, here is defined in 30 seconds. 
+This tells the router to establish pseudowires to both R8 and R7, but the pseudowire to R7 will only be used if the connection to R8 fails. The revert-time determines how long the router waits before moving traffic back to R8 after it recovers. Here, it's set to 30 seconds.
 
-In R8 and R7, let's configure the VPLS, but to avoid loops, we can't configure a pseudowire between then. 
+On R8 and R7, we'll configure the local VPLS instances. However, to prevent a core loop, we must not configure a pseudowire between R8 and R7 themselves.
 ```
 set routing-instances VPLS-CE6 instance-type vpls
 set routing-instances VPLS-CE6 protocols vpls interface-mac-limit 20
@@ -544,7 +545,7 @@ set routing-instances VPLS-CE6 vlan-id all
 set routing-instances VPLS-CE6 interface ge-0/0/8.600
 set routing-instances VPLS-CE6 interface ge-0/0/8.601
 ```
-With this, let's check the status on R1:
+With that applied, let's check the connection status on R1:
 ```
 root@R1> show vpls connections
 Layer-2 VPN connections:
@@ -592,9 +593,9 @@ Instance: VPLS-CE6
       Flow Label Transmit: Yes, Flow Label Receive: Yes
     10.0.0.7(vpls-id 6)       rmt   ST
 ```
-You can see here, R8's pseudowire is UP, and R7's pseudowire is with the ST flag, as Standby Connection. 
+As you can see, the pseudowire to R8 is Up, while the pseudowire to R7 shows the ST flag, meaning it is a Standby Connection.
 
-If you go look into R7, you can see the pseudowires established to R1 and R6. This is what the ```stanby``` knob do. The pseudowire is up but not in use. 
+If you check R7, you'll see the pseudowires to R1 and R6 are established. This is exactly what the ```standby``` knob does on the remote ends: the signaling happens and the pseudowire is technically up, but the data plane is blocked and not in use.
 ```
 root@R7> show vpls connections
 Layer-2 VPN connections:
@@ -641,7 +642,7 @@ Instance: VPLS-CE6
         Description: Intf - vpls VPLS-CE6 neighbor 10.0.0.6 vpls-id 6
       Flow Label Transmit: Yes, Flow Label Receive: Yes
 ```
-With this, theoritically the R7 will not learn any MAC address from remote PEs: 
+Because of this standby state, R7 theoretically shouldn't learn any MAC addresses from the remote PEs:
 ```
 root@R7> show vpls mac-table
 
@@ -667,9 +668,9 @@ Routing instance : VPLS-CE6
    50:32:6d:00:38:00   D                ge-0/0/8.601
    50:fc:a2:00:20:00   D                ge-0/0/8.601
 ```
-Different than VPLS Kompella, we don't have any signalling between the multihomed PEs to identify a multihomed site, then the R7 is learning the MAC addresses of local-interface. 
+Unlike Kompella VPLS, Martini VPLS doesn't have native BGP signaling between the multi-homed PEs to coordinate the site election. Because of this, R7 is still learning MAC addresses from its locally connected interface, even though it isn't forwarding them to the core.
 
-Now, in R8 we have the mac-table complete: 
+Meanwhile, on R8 (the active forwarder), the MAC table is fully populated:
 ```
 root@R8> show vpls mac-table
 
@@ -695,17 +696,17 @@ Routing instance : VPLS-CE6
    50:32:6d:00:38:01   D                ge-0/0/5.601
    50:fc:a2:00:20:00   D                lsi.1048832
 ```
-Ok, now let's apply some constraints here, I don't want that this customer have more than 20 MAC addresses on the mac-table, I'll limit this and drop the packets if the customer tresspass the limit: 
+Alright, let's apply some constraints. I don't want this customer filling up our tables with more than 20 MAC addresses. I'll configure a limit and tell the router to drop packets if the customer exceeds it:
 
-Let's apply this in all PEs:
+Let's apply this across all PEs:
 ```
 set routing-instances VPLS-CE6 protocols vpls mac-table-size 20
 set routing-instances VPLS-CE6 protocols vpls mac-table-size packet-action drop
 set routing-instances VPLS-CE6 protocols vpls interface-mac-limit 20
 ```
-In case of some problem in the customer LAN, we'll avoid some overload in our network. 
+If there's ever a bridging loop or an attack on the customer's LAN, this constraint prevents it from overloading our PE memory.
 
-Let's ask the customer some tests to confirm if the service is complete: 
+Let's ask the customer to run some pings to confirm the service is fully operational:
 ```
 [admin@CE6-1] > ping 172.60.0.2
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -721,13 +722,13 @@ Let's ask the customer some tests to confirm if the service is complete:
     2 172.60.0.3                                 56  64 15ms477us
     sent=3 received=3 packet-loss=0% min-rtt=6ms309us avg-rtt=16ms597us max-rtt=28ms6us
 ```
-Everything looks good!!!
+Everything looks great!
 
-Now, the Customer 5 is calling me...
+But wait, Customer 5 is calling me...
 
-He wants to connect his Site 1, that haves VPWS into VPLS! Ok man, let's do it. 
+They want to connect Site 1 (which is currently on a VPWS) directly into their VPLS! No problem, let's make it happen.
 
-At R7, let's add another VLAN to this connection, and create a new pseudowire into L2CKT: 
+On R7, we'll add another VLAN unit to the PE-CE interface and map it to a new L2CKT pseudowire:
 ```
 set interfaces ge-0/0/7 unit 500 description S1-VPLS
 set interfaces ge-0/0/7 unit 500 encapsulation vlan-ccc
@@ -735,9 +736,9 @@ set interfaces ge-0/0/7 unit 500 vlan-id 500
 set routing-instances L2VPN-CE5-S1 protocols l2vpn site s1 interface ge-0/0/7.500 remote-site-id 10
 set routing-instances L2VPN-CE5-S1 interface ge-0/0/7.500
 ```
-This way, we'll transport all the traffic of the VLAN 500 to the Site 10, Site 10 don't exist, is only a ficitcious site that we'll create on R3 to interconnect the services. 
+This will transport all traffic from VLAN 500 over to "Site 10". Site 10 doesn't actually exist in the physical world; it's a fictitious local site we are going to create on R3 just to stitch the VPWS and VPLS together.
 
-In R3, we need to create two units on the logical-tunnel interface. An unit to include into VPWS, and another one to include into VPLS, both with the VLAN 500 configured, but with different encapsulation to work properly into VPLS and VPWS. 
+On R3, we need to create two units on a logical-tunnel (``lt``) interface. One unit will be placed into the VPWS routing instance, and the other into the VPLS instance. Both units will use VLAN 500, but they require different encapsulation types to translate the frames between VPWS and VPLS properly.
 ```
 set interfaces lt-0/0/0 unit 0 encapsulation vlan-ccc
 set interfaces lt-0/0/0 unit 0 vlan-id 500
@@ -755,20 +756,18 @@ set routing-instances VPLS-CE5 protocols vpls site s10 interface lt-0/0/0.1
 set routing-instances VPLS-CE5 protocols vpls site s10 site-identifier 10
 set routing-instances VPLS-CE5 interface lt-0/0/0.1
 ```
-Into L2VPN, let's add our Site 10 and the connection to the Site 1, and on the VPLS let's add another site including the lt interface also. 
+Inside the VPWS configuration, we define our fictitious Site 10 and point it towards Site 1. Then, in the VPLS configuration, we simply add a new site and bind the other end of the lt interface to it.
 
-Now, the traffic of the Site 1 that comes from VLAN 500, will go to the R3, and in R3 will be forwarded trough lt-0/0/0.0 to lt-0/0/0.1, then forwarded to the VPLS! And the opposite occurs too. You got it? It's easy, come on. 
+Now, traffic arriving from Site 1 on VLAN 500 travels across the core to R3. R3 receives it on the VPWS, passes it through the logical tunnel (lt-0/0/0.0 to lt-0/0/0.1), and injects it straight into the VPLS! The reverse path works exactly the same way. See? It's elegant and easy once you get the hang of it.
 
-Enjoying this new requirement, I'll add limits on the VPLS also. I
-
-I'll limit the mac-learning of the VPLS in 16 addresses:
+While I'm at it, I'll add a MAC limit to the Customer 5 VPLS as well. I'll cap the MAC learning at 16 addresses:
 ```
 set routing-instances VPLS-CE5 protocols vpls mac-table-size 16
 set routing-instances VPLS-CE5 protocols vpls interface-mac-limit 16
 ```
-But this time, I won't drop the packets. 
+But this time, I won't drop the packets when the limit is hit.
 
-Let's ask the customer if Site 1 have connection with the VPLS sites:
+Let's check with the customer to ensure Site 1 can reach the rest of the VPLS sites:
 ```
 [admin@CE5-1] > ping 172.50.0.4
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -804,11 +803,11 @@ Columns: ADDRESS, MAC-ADDRESS, INTERFACE
 3 DC 172.50.0.5  50:66:CC:00:2B:00  vlan500
 4 DC 172.50.0.4  50:9D:8C:00:25:00  vlan500
 ```
-Everything is ok!!! 
+Everything is working flawlessly!
 
-All our goals is accomplished here, I will add a bonus here. Do you remember that I commented in the previous article about LDP FEC 128? VPLS Martini and L2CKT uses the same message, we can establish a pseudowire between two routers using VPLS at one side, and VPWS in the other side. I'll show you an example, we can define this as H-VPLS, like a hub-and spoke topology. 
+All of our primary goals are accomplished, but I promised a bonus! Do you remember what I mentioned in the previous article about the LDP FEC 128 message? Because Martini VPLS and L2CKTs use the exact same signaling message, we can actually establish a pseudowire where one side terminates in a VPLS and the other side terminates in a VPWS! Let me show you an example. We can use this to build an H-VPLS (Hierarchical VPLS), effectively creating a hub-and-spoke topology.
 
-At R1 we'll have a VPLS configured, and on R5 and R6 we'll have L2CKT. 
+On R1 (the Hub), we'll configure a VPLS instance. On R5 and R6 (the Spokes), we'll configure standard L2CKTs.
 R1:
 ```
 set interfaces ge-0/0/9 unit 610 encapsulation vlan-vpls
@@ -840,7 +839,7 @@ set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 encapsulation-t
 set protocols l2circuit neighbor 10.0.0.1 interface ge-0/0/9.610 no-vlan-id-validate
 ```
 
-Now, on R1 we have the pseudowires established correctly:
+Now, checking R1, we see the pseudowires established natively into the VPLS:
 ```
 root@R1> show vpls connections instance H-VPLS-Example
 Layer-2 VPN connections:
@@ -887,6 +886,6 @@ Instance: H-VPLS-Example
         Description: Intf - vpls H-VPLS-Example neighbor 10.0.0.6 vpls-id 610
       Flow Label Transmit: Yes, Flow Label Receive: Yes
 ```
-This is naturally a hub-and-spoke topology, R5 and R6 can't communicate this way, we can add a mesh-group including the two pseudowires and enabling the local-switch to change the default behavior. 
+Because this is naturally a hub-and-spoke topology, R5 and R6 cannot communicate directly with each other by default (due to VPLS split-horizon rules). If we wanted them to communicate through the Hub, we would need to place both pseudowires into a mesh-group and enable local-switching on R1 to alter the default forwarding behavior.
 
-That's all folks!!! The next time I'll write about EVPN, an exciting topic!!! See you next. 
+That's all for today, folks! In the next article, we are finally diving into EVPN, an incredibly exciting and modern topic! See you next time.
