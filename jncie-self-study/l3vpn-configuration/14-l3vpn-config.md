@@ -706,6 +706,8 @@ Basically, we'll receive only the hub site routes, and reject the spoke site rou
 
 Now, let's finish the configuration of the routing-instance:
 ```
+set routing-options autonomous-system 65020 loops 3
+
 set routing-instances VRF-C2-SPOKE instance-type vrf
 set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE type external
 set routing-instances VRF-C2-SPOKE protocols bgp group eBGP-CE2-SPOKE description eBGP-CE2-SPOKE
@@ -720,7 +722,9 @@ set routing-instances VRF-C2-SPOKE vrf-import Entrada-VRF-CE2-SPOKE
 set routing-instances VRF-C2-SPOKE vrf-export Saida-VRF-CE2-SPOKE
 set routing-instances VRF-C2-SPOKE vrf-table-label
 ```
+Note: The as-loops is configured to not reject the default route from the HUB sites. Because this route is received with our own AS on AS-PATH. 
 Ok, let's replicate this on the other spoke PEs and check the results!!! 
+
 
 Let's see what we have in our route-table:
 ```
