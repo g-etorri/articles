@@ -29,6 +29,13 @@ set protocols bgp group eBGP-AS65503-Provider3 family inet labeled-unicast rib i
 set policy-options policy-statement Saida-P3 term from-igp from route-filter 10.0.0.0/24 upto /32
 set policy-options policy-statement Saida-P3 term from-igp then accept
 ```
+To advertise the loopback of R3, we just need to include this route on inet.3. We can do this with a rib-group:
+```
+set routing-options rib-groups inet0-to-inet3 import-rib inet.0
+set routing-options rib-groups inet0-to-inet3 import-rib inet.3
+
+set routing-options interface-routes rib-group inet inet0-to-inet3
+```
 With this, we'll export all these routes present on inet.3:
 ```
 root@R3> show route table inet.3 10.0.0.0/24 active-path
@@ -96,3 +103,287 @@ set protocols bgp group eBGP-AS65503-LU peer-as 65503
 set protocols bgp group eBGP-AS65503-LU neighbor 10.0.1.3 family l2vpn signaling
 ```
 Basically, this is a multihop eBGP session, that speaks l2vpn family. 
+
+To this session can establish, we need to change some configuration on our RR: 
+```
+delete group iBGP-AS65020-West family inet unicast nexthop-resolution
+delete group iBGP-AS65020-West family inet unicast no-install
+delete group iBGP-AS65020-East family inet unicast nexthop-resolution
+delete group iBGP-AS65020-East family inet unicast no-install
+
+set routing-options resolution rib inet.3 resolution-ribs inet.0
+```
+Without install the route of P3, the RR can't establish the connection because in eBGP cases, Junos uses the inet.0 to speak with the neighbor, and in the inet.0 we wasn't installing the route. And finally, to resolve the BGP-LU route, we need to resolve them, so I setted the resolution rib to inet.3 routes as the inet.0 table. Now, our router installs the route and can establish the session. 
+```
+root@RR> show route 10.0.1.3
+
+inet.0: 216 destinations, 452 routes (216 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.1.3/32        *[BGP/170] 00:03:19, localpref 100, from 10.0.0.3
+                      AS path: 65503 I, validation-state: unverified
+                    >  to 10.200.0.26 via ge-0/0/1.0
+
+inet.3: 64 destinations, 71 routes (64 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.1.3/32        *[BGP/170] 00:01:59, localpref 100, from 10.0.0.3
+                      AS path: 65503 I, validation-state: unverified
+                    >  to 10.200.0.26 via ge-0/0/1.0, Push 953
+
+root@RR> show bgp summary group eBGP-AS65503-LU
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 3 Peers: 9 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+bgp.rtarget.0
+                      44         21          0          0          0          0
+inet.0
+                     389        153          0          0          0          0
+inet6.0
+                      61         25          0          0          0          0
+bgp.l3vpn.0
+                      66         66          0          0          0          0
+bgp.l3vpn-inet6.0
+                       6          6          0          0          0          0
+bgp.mvpn.0
+                       5          5          0          0          0          0
+bgp.l2vpn.0
+                      15         15          0          0          0          0
+bgp.evpn.0
+                      45         45          0          0          0          0
+inet.3
+                      71         64          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.1.3              65503         19         23       0       0        6:38 Establ
+  bgp.l2vpn.0: 1/1/1/0
+```
+Now, let's look what routes we are receiving: 
+```
+root@RR> show route receive-protocol bgp 10.0.1.3 table bgp.l2vpn.0 detail
+
+bgp.l2vpn.0: 15 destinations, 15 routes (15 active, 0 holddown, 0 hidden)
+*  10.0.1.3:500:7:1/96 (1 entry, 1 announced)
+     Accepted
+     Route Distinguisher: 10.0.1.3:500
+     Label-base: 262145, range: 8, offset: 1
+     Nexthop: 10.0.1.3
+     AS path: 65503 I
+     Communities: target:65020:1555 Layer2-info: encaps: VPLS, control flags:[0x0] , mtu: 0, site preference: 100
+```
+Now we know what is the RT used on the P3 network. We need to do a similar logic that we do previously on the L3VPN, we need to normalize this RT to interconnect the sites: 
+```
+set policy-options community l2vpn-c5 members target:65020:500
+set policy-options community l2vpn-c5-remote members target:65020:1555
+
+set policy-options policy-statement Entrada-P3-L2VPN term 1 from community l2vpn-c5-remote
+set policy-options policy-statement Entrada-P3-L2VPN term 1 then community add l2vpn-c5
+set policy-options policy-statement Entrada-P3-L2VPN term 1 then community delete l2vpn-c5-remote
+set policy-options policy-statement Entrada-P3-L2VPN term 1 then accept
+set policy-options policy-statement Entrada-P3-L2VPN then reject
+
+set policy-options policy-statement Saida-P3-L2VPN term 1 from community l2vpn-c5
+set policy-options policy-statement Saida-P3-L2VPN term 1 then community add l2vpn-c5-remote
+set policy-options policy-statement Saida-P3-L2VPN term 1 then community delete l2vpn-c5
+set policy-options policy-statement Saida-P3-L2VPN term 1 then accept
+set policy-options policy-statement Saida-P3-L2VPN then reject
+
+set protocols bgp group eBGP-AS65503-LU import Entrada-P3-L2VPN
+set protocols bgp group eBGP-AS65503-LU export Saida-P3-L2VPN
+```
+With this, we'll receive the l2vpn routes and change the RT to advertise to our PEs, and vice-versa, now, let's check the advertisments: 
+```
+root@RR> show route receive-protocol bgp 10.0.1.3
+
+bgp.l2vpn.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.0.1.3:500:7:1/96
+*                         10.0.1.3                                65503 I
+  10.0.1.3:500:7:9/96
+*                         10.0.1.3                                65503 I
+
+root@RR> show route advertising-protocol bgp 10.0.1.3
+
+bgp.l2vpn.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.0.0.2:500:4:1/96
+*                         Not advertised                          I
+  10.0.0.2:500:4:9/96
+*                         Not advertised                          I
+  10.0.0.3:500:5:1/96
+*                         Not advertised                          I
+  10.0.0.3:500:10:1/96
+*                         Not advertised                          I
+  10.0.0.3:500:10:9/96
+*                         Not advertised                          I
+  10.0.0.4:500:5:1/96
+*                         Not advertised                          I
+  10.0.0.4:500:5:9/96
+*                         Not advertised                          I
+  10.0.0.5:500:6:1/96
+*                         Not advertised                          I
+  10.0.0.5:500:6:9/96
+*                         Not advertised                          I
+```
+Here we have a specific problem, the l2vpn routes aren't advertised to P3. This happens because in eBGP sessions, by default the router changes the next-hop attibute. 
+
+If we check the state of pseudowire on R2, we can view the pseudowire up:
+```
+root@R2> show vpls connections
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch           HS -- Hot-standby Connection
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: VPLS-CE5
+Edge protection: Not-Primary
+  Local site: s4 (4)
+    connection-site           Type  St     Time last up          # Up trans
+    5                         rmt   Up     Apr 16 15:17:08 2026           1
+      Remote PE: 10.0.0.3, Negotiated control-word: No
+      Incoming label: 28, Outgoing label: 294
+      Local interface: vt-0/0/0.1048590, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 4 remote site 5
+      Flow Label Transmit: No, Flow Label Receive: No
+    6                         rmt   Up     Apr 16 15:17:08 2026           1
+      Remote PE: 10.0.0.5, Negotiated control-word: No
+      Incoming label: 29, Outgoing label: 22
+      Local interface: vt-0/0/0.1048589, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 4 remote site 6
+      Flow Label Transmit: No, Flow Label Receive: No
+    7                         rmt   Up     Apr 16 15:38:52 2026           1
+      Remote PE: 10.0.1.3, Negotiated control-word: No
+      Incoming label: 30, Outgoing label: 262148
+      Local interface: vt-0/0/0.1048591, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 4 remote site 7
+      Flow Label Transmit: No, Flow Label Receive: No
+    10                        rmt   RM
+```
+Buy why? Because our RR advertised the route without change the next-hop, following the standard rules of BGP. Then, R2 receives the route and advertises his route, so it considers the pseudowire up. 
+
+Now, I have a knob to change this behavior:
+```
+set protocols bgp group eBGP-AS65503-LU multihop no-nexthop-change
+```
+This way, when our RR will advertise the routes, the next-hop will not be changed. 
+```
+root@RR> show route advertising-protocol bgp 10.0.1.3
+
+bgp.l2vpn.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.0.0.2:500:4:1/96
+*                         10.0.0.2                                I
+  10.0.0.2:500:4:9/96
+*                         10.0.0.2                                I
+  10.0.0.3:500:5:1/96
+*                         10.0.0.3                                I
+  10.0.0.3:500:10:1/96
+*                         10.0.0.3                                I
+  10.0.0.3:500:10:9/96
+*                         10.0.0.3                                I
+  10.0.0.4:500:5:1/96
+*                         10.0.0.4                                I
+  10.0.0.4:500:5:9/96
+*                         10.0.0.4                                I
+  10.0.0.5:500:6:1/96
+*                         10.0.0.5                                I
+  10.0.0.5:500:6:9/96
+*                         10.0.0.5                                I
+
+root@P3-1> show vpls connections
+Layer-2 VPN connections:
+
+Legend for connection status (St)
+EI -- encapsulation invalid      NC -- interface encapsulation not CCC/TCC/VPLS
+EM -- encapsulation mismatch     WE -- interface and instance encaps not same
+VC-Dn -- Virtual circuit down    NP -- interface hardware not present
+CM -- control-word mismatch      -> -- only outbound connection is up
+CN -- circuit not provisioned    <- -- only inbound connection is up
+OR -- out of range               Up -- operational
+OL -- no outgoing label          Dn -- down
+LD -- local site signaled down   CF -- call admission control failure
+RD -- remote site signaled down  SC -- local and remote site ID collision
+LN -- local site not designated  LM -- local site ID not minimum designated
+RN -- remote site not designated RM -- remote site ID not minimum designated
+XX -- unknown connection status  IL -- no incoming label
+MM -- MTU mismatch               MI -- Mesh-Group ID not available
+BK -- Backup connection          ST -- Standby connection
+PF -- Profile parse failure      PB -- Profile busy
+RS -- remote site standby        SN -- Static Neighbor
+LB -- Local site not best-site   RB -- Remote site not best-site
+VM -- VLAN ID mismatch
+
+Legend for interface status
+Up -- operational
+Dn -- down
+
+Instance: VPLS-CE5
+  Local site: s7 (7)
+    connection-site           Type  St     Time last up          # Up trans
+    4                         rmt   Up     Apr 15 15:53:21 2026           1
+      Remote PE: 10.0.0.2, Negotiated control-word: No
+      Incoming label: 262148, Outgoing label: 30
+      Local interface: lsi.1048833, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 7 remote site 4
+    5                         rmt   Up     Apr 15 15:53:21 2026           1
+      Remote PE: 10.0.0.3, Negotiated control-word: No
+      Incoming label: 262149, Outgoing label: 297
+      Local interface: lsi.1048832, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 7 remote site 5
+    6                         rmt   Up     Apr 15 15:53:21 2026           1
+      Remote PE: 10.0.0.5, Negotiated control-word: No
+      Incoming label: 262150, Outgoing label: 25
+      Local interface: lsi.1048834, Status: Up, Encapsulation: VPLS
+        Description: Intf - vpls VPLS-CE5 local site 7 remote site 6
+    10                        rmt   RM
+```
+Now, the pseudowires is completely established. Let's ask the customer to test the connectivity:
+```
+[admin@CE5-7] > ping 172.50.1.4
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.1.4                                 56  64 10ms716us
+    1 172.50.1.4                                 56  64 4ms791us
+    sent=2 received=2 packet-loss=0% min-rtt=4ms791us avg-rtt=7ms753us max-rtt=10ms716us
+
+[admin@CE5-7] > ping 172.50.1.5
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.1.5                                 56  64 13ms91us
+    1 172.50.1.5                                 56  64 3ms654us
+    sent=2 received=2 packet-loss=0% min-rtt=3ms654us avg-rtt=8ms372us max-rtt=13ms91us
+
+[admin@CE5-7] > ping 172.50.1.5
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.1.5                                 56  64 5ms10us
+    1 172.50.1.5                                 56  64 3ms363us
+    sent=2 received=2 packet-loss=0% min-rtt=3ms363us avg-rtt=4ms186us max-rtt=5ms10us
+
+[admin@CE5-7] > ping 172.50.1.6
+  SEQ HOST                                     SIZE TTL TIME       STATUS
+    0 172.50.1.6                                 56  64 38ms639us
+    1 172.50.1.6                                 56  64 12ms881us
+    sent=2 received=2 packet-loss=0% min-rtt=12ms881us avg-rtt=25ms760us max-rtt=38ms639us
+```
+Everythins is great!!!! 
+
+With this, we finished our VPNs journey, and can go on Class of Services. See you in the next time, bye! 
