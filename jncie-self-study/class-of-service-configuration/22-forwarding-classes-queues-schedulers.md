@@ -60,7 +60,7 @@ Let's define the schedulers accordingly the table:
 | nc-sc-q3      | Transmit Rate        | 5%          |
 | nc-sc-q3      | Buffer Size          | 5%          |
 
-You can see in the table that we have a parameter defined as drop profile, this is a method that is called Random Early Detection, or RED. This is used to avoid the queue will be 100% full and locks. Let's define this profiles to explain the queues better. 
+You can see in the table that we have a parameter defined as drop profile, this is a method that uses a technique called Weighted Random Early Detection, or WRED. This is used to avoid the queue will be 100% full and locks. Let's define this profiles to explain the queues better. 
 | Profile | Fill Level | Drop Probability | 
 | - | - | - |
 | low-drop | 25 | 5 |
@@ -88,8 +88,151 @@ set class-of-service drop-profiles high-drop interpolate drop-probability 10
 set class-of-service drop-profiles high-drop interpolate drop-probability 30
 set class-of-service drop-profiles high-drop interpolate drop-probability 65
 ```
+This interpolate configuration turns this in a gradative dropping, accordingly the fill level:
+```
+root@R8> show class-of-service drop-profile
+Drop profile: <default-drop-profile>, Type: discrete, Index: 1
+  Fill level    Drop probability
+         100                 100
+Drop profile: high-drop, Type: interpolated, Index: 48162
+  Fill level    Drop probability
+           0                   0
+           1                   0
+           2                   0
+           4                   1
+           5                   2
+           6                   2
+           8                   3
+          10                   4
+          12                   4
+          14                   5
+          15                   6
+          16                   6
+          18                   7
+          20                   8
+          22                   8
+          24                   9
+          25                  10
+          26                  10
+          28                  12
+          30                  14
+          32                  15
+          34                  17
+          35                  18
+          36                  18
+          38                  20
+          40                  22
+          42                  23
+          44                  25
+          45                  26
+          46                  26
+          48                  28
+          49                  29
+          51                  31
+          52                  32
+          54                  35
+          55                  37
+          56                  38
+          58                  41
+          60                  44
+          62                  46
+          64                  49
+          65                  51
+          66                  52
+          68                  55
+          70                  58
+          72                  60
+          74                  63
+          75                  65
+          76                  66
+          78                  69
+          80                  72
+          82                  74
+          84                  77
+          85                  79
+          86                  80
+          88                  83
+          90                  86
+          92                  88
+          94                  91
+          95                  93
+          96                  94
+          98                  97
+          99                  98
+         100                 100
+Drop profile: low-drop, Type: interpolated, Index: 59912
+  Fill level    Drop probability
+           0                   0
+           1                   0
+           2                   0
+           4                   0
+           5                   1
+           6                   1
+           8                   1
+          10                   2
+          12                   2
+          14                   2
+          15                   3
+          16                   3
+          18                   3
+          20                   4
+          22                   4
+          24                   4
+          25                   5
+          26                   5
+          28                   6
+          30                   7
+          32                   7
+          34                   8
+          35                   9
+          36                   9
+          38                  10
+          40                  11
+          42                  11
+          44                  12
+          45                  13
+          46                  13
+          48                  14
+          49                  14
+          51                  16
+          52                  17
+          54                  19
+          55                  20
+          56                  21
+          58                  23
+          60                  25
+          62                  27
+          64                  29
+          65                  30
+          66                  31
+          68                  33
+          70                  35
+          72                  37
+          74                  39
+          75                  40
+          76                  42
+          78                  47
+          80                  52
+          82                  56
+          84                  61
+          85                  64
+          86                  66
+          88                  71
+          90                  76
+          92                  80
+          94                  85
+          95                  88
+          96                  90
+          98                  95
+          99                  97
+         100                 100
+```
+Here we have the fill level and drop proabibility side-by-side, and transforming this in a graphic, we can see it better:
+<img width="680" height="790" alt="image" src="https://github.com/user-attachments/assets/9279c6ff-397f-46dd-a616-0ce2bdff03ff" />
 
-Now, we can go on schedulers: 
+With the images, everything looks better to understand. So, some classes will have a conservative drop-profile, and other an agresssive. 
+
+Now, we can go back to schedulers applying this in all routers:  
 ```
 set class-of-service schedulers be-sc-q0 transmit-rate remainder
 set class-of-service schedulers be-sc-q0 buffer-size remainder
@@ -110,4 +253,7 @@ set class-of-service schedulers nc-sc-q3 transmit-rate percent 5
 set class-of-service schedulers nc-sc-q3 buffer-size percent 5
 set class-of-service schedulers nc-sc-q3 priority high
 ```
+Let's explain the queues now: 
+* Best-effort: The transmit-rate specify what is the CIR, or guaranted bandwidth, and this class don't have, it will use the remainder bandwidth in the interface that is not allocated to the other queues. The buffer-size specify the size of queue on memory, and also will use the remainder. In both cases, transmit-rate and buffer-size, this queue can borrow the capacity of the other queues if it's not in use. Priority defines literally the priority of the traffic, and the drop-profile-map sets that this queue will use the high-drop profile to drop the packets with any loss-priority.
 
+Note: Loss-priority is like a internal tag that Junos uses to classify which packet it can drops first. The loss-priority aren't marked in any field of the packet, is literally a internal feature that mark the packets when enter in the router, and is used to decide when the packet can be dropped. The loss-priority is marked on classifiers and we'll see it later. 
