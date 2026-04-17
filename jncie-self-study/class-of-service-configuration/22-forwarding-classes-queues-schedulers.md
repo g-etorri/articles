@@ -264,4 +264,71 @@ Note: Loss-priority is like a internal tag that Junos uses to classify which pac
 
 * Network Control: Here we have the most prioritary traffic, we'll gurantee 5% of interface bandwidth and buffer, and the priority is high.
 
+Now, to appply this schedulers onto forwarding-classes, we need to use the sheduler-maps, the scheduler-maps are responsible to link the forwarding-class with a scheduler basically. 
+```
+set class-of-service scheduler-maps bkb-interfaces forwarding-class best-effort scheduler be-sc-q0
+set class-of-service scheduler-maps bkb-interfaces forwarding-class nc scheduler nc-sc-q3
+set class-of-service scheduler-maps bkb-interfaces forwarding-class vpn scheduler vpn-sc-q1
+set class-of-service scheduler-maps bkb-interfaces forwarding-class vpn-priority scheduler vpn-pri-sc-q2
+```
+This way, the traffic in a forwarding-class, will have the scheduler treatment correctly. 
 
+Now, to apply this queues in the backbone interfaces, we need to do this: 
+```
+set class-of-service interfaces ge-0/0/2 scheduler-map bkb-interfaces
+set class-of-service interfaces ge-0/0/3 scheduler-map bkb-interfaces
+set class-of-service interfaces ge-0/0/4 scheduler-map bkb-interfaces
+set class-of-service interfaces ae0 scheduler-map bkb-interfaces
+```
+Here I applied the configuration on R1, but we have to apply this on all routers similarly. 
+
+To check if the configuration is correctly applied, we can see the output:
+```
+root@R8> show class-of-service scheduler-map bkb-interfaces
+Scheduler map: bkb-interfaces, Index: 28224
+
+  Scheduler: be-sc-q0, Forwarding class: best-effort, Index: 9240
+    Transmit rate: remainder, Rate Limit: none, Buffer size: remainder, Buffer Limit: none, Priority: low
+    Excess Priority: unspecified, Queue Depth Monitoring: disabled
+    Drop profiles:
+      Loss priority   Protocol    Index    Name
+      Low             any         48162    high-drop
+      Medium low      any         48162    high-drop
+      Medium high     any         48162    high-drop
+      High            any         48162    high-drop
+
+  Scheduler: vpn-sc-q1, Forwarding class: vpn, Index: 37515
+    Transmit rate: 20 percent, Rate Limit: none, Buffer size: 20 percent, Buffer Limit: none, Priority: medium-low
+    Excess Priority: unspecified, Queue Depth Monitoring: disabled
+    Drop profiles:
+      Loss priority   Protocol    Index    Name
+      Low             any         59912    low-drop
+      Medium low      any             1    <default-drop-profile>
+      Medium high     any             1    <default-drop-profile>
+      High            any         48162    high-drop
+
+  Scheduler: vpn-pri-sc-q2, Forwarding class: vpn-priority, Index: 44323
+    Transmit rate: 10 percent, Rate Limit: none, Buffer size: 5000 us, Buffer Limit: none, Priority: medium-high
+    Excess Priority: unspecified, Queue Depth Monitoring: disabled
+    Drop profiles:
+      Loss priority   Protocol    Index    Name
+      Low             any             1    <default-drop-profile>
+      Medium low      any             1    <default-drop-profile>
+      Medium high     any             1    <default-drop-profile>
+      High            any             1    <default-drop-profile>
+
+  Scheduler: nc-sc-q3, Forwarding class: nc, Index: 42106
+    Transmit rate: 5 percent, Rate Limit: none, Buffer size: 5 percent, Buffer Limit: none, Priority: high
+    Excess Priority: unspecified, Queue Depth Monitoring: disabled
+    Drop profiles:
+      Loss priority   Protocol    Index    Name
+      Low             any             1    <default-drop-profile>
+      Medium low      any             1    <default-drop-profile>
+      Medium high     any             1    <default-drop-profile>
+      High            any             1    <default-drop-profile>
+```
+Everything looks good!!! And in this output we can see what drop-profiles are used for each loss-priority type of the packets. Notice in the best-effort the high-drop is used to any loss-profile, and in the vpn class, the drop-profiles is used on packets with loss-priority low and high, but in the mediums priorities the drop-profile used is the default, in other words, the packets with medium LP are dropped only when the queue is 100% full. 
+
+
+
+Okay, with the forwarding-classes deffi ned, 
