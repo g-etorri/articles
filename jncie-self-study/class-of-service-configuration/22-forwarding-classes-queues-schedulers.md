@@ -257,3 +257,11 @@ Let's explain the queues now:
 * Best-effort: The transmit-rate specify what is the CIR, or guaranted bandwidth, and this class don't have, it will use the remainder bandwidth in the interface that is not allocated to the other queues. The buffer-size specify the size of queue on memory, and also will use the remainder. In both cases, transmit-rate and buffer-size, this queue can borrow the capacity of the other queues if it's not in use. Priority defines literally the priority of the traffic, and the drop-profile-map sets that this queue will use the high-drop profile to drop the packets with any loss-priority.
 
 Note: Loss-priority is like a internal tag that Junos uses to classify which packet it can drops first. The loss-priority aren't marked in any field of the packet, is literally a internal feature that mark the packets when enter in the router, and is used to decide when the packet can be dropped. The loss-priority is marked on classifiers and we'll see it later. 
+
+* VPN: The transmit-rate will have a guarantee of 20% of the interface bandwidth, and 20% of memory. The priority of this traffic will be medium-low, and here we will uses two drop-profiles, for the packets with loss-priority low, the low-drop will be used, and for the packets with high loss-priority, the high-drop will be used.
+
+* VPN Priority: This class can be used for sensible services, like VoIP or streamings. Here we'll gurantee 10% of interface bandwidth and the buffer-size is different, when it comes to sensible services, we are talking about latency and jitter, here we are definying that the packets can stay in memory for 5ms or it will be dropped, considering the latency, the packet can be useless and no makes senses to mantain this on buffer. The priority is defined in medium-high.
+
+* Network Control: Here we have the most prioritary traffic, we'll gurantee 5% of interface bandwidth and buffer, and the priority is high.
+
+
