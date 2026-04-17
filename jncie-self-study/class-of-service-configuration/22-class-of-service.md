@@ -331,4 +331,34 @@ Everything looks good!!! And in this output we can see what drop-profiles are us
 
 Now, we can go to the classification, policing and marking. We can define each step, the classification is when the packets are entering the router, so based in some BITS of the packet we can classify the traffic, with the DSCP for example. The policing is defined in limit the traffic with policers, so we can limit a type of traffic in 5Mbps for example, and the marking is when the packet is leaving the router, when the route apply the rewrite-rule, to guarantee the DSCP value, or transforming the DSCP value in EXP bits in a MPLS header. 
 
-Now, we'll verify this step with more details. 
+Now, we'll verify this steps with more details. 
+
+First, let's define the values of the DSCP and EXP bits that our packets will have to classify them correcty. See this table:
+| Forwarding Class | Loss Priority | Valor DSCP | Valor EXP |
+| ---------------- | ------------- | ---------- | --------- |
+| best-effort      | any           | 0b000000   | 0b000     |
+| vpn-low          | low           | 0b001010   | 0b010     |
+| vpn-high         | high          | 0b001100   | 0b011     |
+| vpn-priority     | any           | 0b101110   | 0b101     |
+| nc               | any           | 0b110000   | N/A       |
+Notice the Network Control will not have EXP bit defined, because the network protocols will not run on MPLS network. Except the LDP with ldp-tunneling, but this is a special case in our lab. 
+
+We need to define this values with alias, to call them on the configuration:
+```
+set class-of-service code-point-aliases dscp best-effort 000000
+set class-of-service code-point-aliases dscp nc 110000
+set class-of-service code-point-aliases dscp vpn-high 001100
+set class-of-service code-point-aliases dscp vpn-low 001010
+set class-of-service code-point-aliases dscp vpn-priority 101110
+
+set class-of-service code-point-aliases exp best-effort 000
+set class-of-service code-point-aliases exp vpn-high 011
+set class-of-service code-point-aliases exp vpn-low 010
+set class-of-service code-point-aliases exp vpn-priority 101
+```
+
+Before start with the classifiers configuration, let's remember what types of classifiers we have. 
+* Interface Classifier: This is the most simple classifier, basically it classifies all the traffic in the interface. Generally, this classifier is used on PE-CE interfaces. 
+* Behavior Aggregate: This classifier considers the QoS fields on the packets to classify the traffic, in our LAB we'll use the DSCP field and EXP bit of the MPLS header. Based on the code-points-alias that we created, the traffic will be classified. Generally, this classifier is used on CORE/Backbone interfaces.
+* Multifield Classifier: This classifier can consider a lot of things to classify the traffic, considered the most granulated. Is basically a firewall filter rule, where we can define source, destination, protocol, port and so on... This classifier is applied on the interface, and if is applied with the BA classifier, overwrite it. Generally is used on PE-CE interfaces, trunk interfaces and another type of services that needs a most granulated classifier.
+
