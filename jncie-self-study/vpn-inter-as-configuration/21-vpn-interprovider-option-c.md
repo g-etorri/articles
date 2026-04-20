@@ -1,17 +1,17 @@
 # VPN Inter-Provider Option C Configuration
 
-Hello friends, this time is the last VPN that we'll configure in our JNCIE-SP journey. This is sad, but in the same time is happy. We've explored so many features in this journey. 
+Hello friends, this is the last VPN that we'll configure in our JNCIE-SP journey. It's a bit sad, but at the same time, I'm happy we've explored so many features along the way.
 
-This is topology that we'll work today:
+Here is the topology we'll work with today:
 <img width="1330" height="913" alt="image" src="https://github.com/user-attachments/assets/55aa7b65-0984-4cff-a42e-ae5fd49cf7c4" />
 
-Our goal is deliver the VPLS service to Customer 5, connected at P3. Following the same lore of the previous article, we acquired P3, and now we can interconnect the services of the common customers. 
+Our goal is to deliver the VPLS service to Customer 5, connected at P3. Following the same lore as the previous article, we acquired P3, and now we need to interconnect the services of our common customers.
 
-This time, we'll use the VPN Inter-AS Option C, in another words, we'll use the BGP-LU to advertise our loopbacks with labels to P3, and the P3 will advertise his own loopback with labels to us. And now, we'll interconnect the P3 with our network. 
+This time, we'll use the VPN Inter-AS Option C. In other words, we'll use BGP-LU to advertise our loopbacks with labels to P3, and P3 will advertise its own loopback with labels to us. Then, we'll interconnect P3 with our network.
 
-You got the logic? When P3 wants to forward the traffic to R1 for example, it will use the label that we advertised trough BGP, then R3 will receive the packet with this label and swap to another label and forward the traffic to our network. And the reverse happens too, when R1 wants to forward traffic to P3, it pushes the label receive on the BGP-LU route, and push another one to R3, with the PHP on the network, R3 will receive the packet with BGP-LU label only, and swaps this label then forward to P3. 
+Do you get the logic? When P3 wants to forward traffic to R1, for example, it will use the label that we advertised through BGP. Then, R3 will receive the packet with this label, swap it to another label, and forward the traffic into our network. The reverse happens too: when R1 wants to forward traffic to P3, it pushes the label received from the BGP-LU route, and pushes another one to reach R3. Thanks to PHP on the network, R3 will receive the packet with only the BGP-LU label, swap this label, and forward it to P3.
 
-Let's configure this now, first, let's enable the family inet labeled-unicast on our BGP mesh:
+Let's configure this now. First, let's enable the family inet labeled-unicast on our BGP mesh:
 RR:
 ```
 set protocols bgp group iBGP-AS65020-West family inet labeled-unicast rib inet.3
@@ -22,21 +22,21 @@ PEs:
 set protocols bgp group iBGP-AS65020-East family inet labeled-unicast rib inet.3
 ```
 
-Now that we have the family connected on our backbone, we can establish a BGP-LU peering with P3. Now, we need to advertise the loopback routes of our network to P3, so we just need to create another term to do this. 
+Now that we have the family active on our backbone, we can establish a BGP-LU peering with P3. Next, we need to advertise the loopback routes of our network to P3, so we just need to create another term to do this.
 ```
 set protocols bgp group eBGP-AS65503-Provider3 family inet labeled-unicast rib inet.3
 
 set policy-options policy-statement Saida-P3 term from-igp from route-filter 10.0.0.0/24 upto /32
 set policy-options policy-statement Saida-P3 term from-igp then accept
 ```
-To advertise the loopback of R3, we just need to include this route on inet.3. We can do this with a rib-group:
+To advertise R3's loopback, we just need to include this route in inet.3. We can do this with a rib-group:
 ```
 set routing-options rib-groups inet0-to-inet3 import-rib inet.0
 set routing-options rib-groups inet0-to-inet3 import-rib inet.3
 
 set routing-options interface-routes rib-group inet inet0-to-inet3
 ```
-With this, we'll export all these routes present on inet.3:
+With this, we'll export all the routes present in inet.3:
 ```
 root@R3> show route table inet.3 10.0.0.0/24 active-path
 
@@ -69,7 +69,7 @@ inet.3: 72 destinations, 133 routes (72 active, 0 holddown, 40 hidden)
                        to 10.200.0.6 via ge-0/0/3.0, label-switched-path R3-R8-A
                        to 10.200.0.11 via ge-0/0/4.0, label-switched-path Bypass->10.200.0.6->10.200.0.0
 ```
-Let's check the advertisements now: 
+Let's check the advertisements now:
 ```
 root@R3> show route advertising-protocol bgp 172.16.3.6 table inet.3
 
@@ -91,9 +91,9 @@ inet.3: 73 destinations, 134 routes (73 active, 0 holddown, 40 hidden)
   Prefix                  Nexthop              MED     Lclpref    AS path
 * 10.0.1.3/32             172.16.3.6                              65503 I
 ```
-Everything is good until here. Now, we need to configure the service. 
+Everything looks good so far. Now, we need to configure the service.
 
-P3 will establish a session with our RR, and advertises the l2vpn routes to interconnect the sites. Let's configure this sessions and check what is the RT of the route advertised. 
+P3 will establish a session with our RR and advertise the l2vpn routes to interconnect the sites. Let's configure this session and check what RT is being advertised.
 ```
 set protocols bgp group eBGP-AS65503-LU type external
 set protocols bgp group eBGP-AS65503-LU description eBGP-AS65503-LU
@@ -102,9 +102,9 @@ set protocols bgp group eBGP-AS65503-LU local-address 10.0.0.0
 set protocols bgp group eBGP-AS65503-LU peer-as 65503
 set protocols bgp group eBGP-AS65503-LU neighbor 10.0.1.3 family l2vpn signaling
 ```
-Basically, this is a multihop eBGP session, that speaks l2vpn family. 
+Basically, this is a multihop eBGP session that speaks the l2vpn family.
 
-To this session can establish, we need to change some configuration on our RR: 
+For this session to establish, we need to change some configurations on our RR:
 ```
 delete group iBGP-AS65020-West family inet unicast nexthop-resolution
 delete group iBGP-AS65020-West family inet unicast no-install
@@ -113,7 +113,7 @@ delete group iBGP-AS65020-East family inet unicast no-install
 
 set routing-options resolution rib inet.3 resolution-ribs inet.0
 ```
-Without install the route of P3, the RR can't establish the connection because in eBGP cases, Junos uses the inet.0 to speak with the neighbor, and in the inet.0 we wasn't installing the route. And finally, to resolve the BGP-LU route, we need to resolve them, so I setted the resolution rib to inet.3 routes as the inet.0 table. Now, our router installs the route and can establish the session. 
+Without installing the route to P3, the RR can't establish the connection. In eBGP cases, Junos uses inet.0 to speak with the neighbor, and we weren't installing the route in inet.0. Finally, to resolve the BGP-LU route, we need to set the resolution RIB to resolve inet.3 routes using the inet.0 table. Now, our router installs the route and can establish the session.
 ```
 root@RR> show route 10.0.1.3
 
@@ -158,7 +158,7 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 10.0.1.3              65503         19         23       0       0        6:38 Establ
   bgp.l2vpn.0: 1/1/1/0
 ```
-Now, let's look what routes we are receiving: 
+Now, let's look at what routes we are receiving:
 ```
 root@RR> show route receive-protocol bgp 10.0.1.3 table bgp.l2vpn.0 detail
 
@@ -171,7 +171,7 @@ bgp.l2vpn.0: 15 destinations, 15 routes (15 active, 0 holddown, 0 hidden)
      AS path: 65503 I
      Communities: target:65020:1555 Layer2-info: encaps: VPLS, control flags:[0x0] , mtu: 0, site preference: 100
 ```
-Now we know what is the RT used on the P3 network. We need to do a similar logic that we do previously on the L3VPN, we need to normalize this RT to interconnect the sites: 
+Now we know what RT is being used on the P3 network. We need to apply a similar logic to what we did previously on the L3VPN; we need to normalize this RT to interconnect the sites:
 ```
 set policy-options community l2vpn-c5 members target:65020:500
 set policy-options community l2vpn-c5-remote members target:65020:1555
@@ -191,7 +191,7 @@ set policy-options policy-statement Saida-P3-L2VPN then reject
 set protocols bgp group eBGP-AS65503-LU import Entrada-P3-L2VPN
 set protocols bgp group eBGP-AS65503-LU export Saida-P3-L2VPN
 ```
-With this, we'll receive the l2vpn routes and change the RT to advertise to our PEs, and vice-versa, now, let's check the advertisments: 
+With this, we'll receive the l2vpn routes and change the RT before advertising them to our PEs, and vice-versa. Now, let's check the advertisements:
 ```
 root@RR> show route receive-protocol bgp 10.0.1.3
 
@@ -225,9 +225,9 @@ bgp.l2vpn.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
   10.0.0.5:500:6:9/96
 *                         Not advertised                          I
 ```
-Here we have a specific problem, the l2vpn routes aren't advertised to P3. This happens because in eBGP sessions, by default the router changes the next-hop attibute. 
+Here we have a specific problem: the l2vpn routes aren't being advertised to P3. This happens because, in eBGP sessions, the router changes the next-hop attribute by default.
 
-If we check the state of pseudowire on R2, we can view the pseudowire up:
+If we check the state of the pseudowire on R2, we can see that it's up:
 ```
 root@R2> show vpls connections
 Layer-2 VPN connections:
@@ -280,13 +280,13 @@ Edge protection: Not-Primary
       Flow Label Transmit: No, Flow Label Receive: No
     10                        rmt   RM
 ```
-Buy why? Because our RR advertised the route without change the next-hop, following the standard rules of BGP. Then, R2 receives the route and advertises his route, so it considers the pseudowire up. 
+But why? Because our RR advertised the route without changing the next-hop, following the standard rules of BGP. Then, R2 receives the route and advertises its own route, so it considers the pseudowire up.
 
-Now, I have a knob to change this behavior:
+Fortunately, there is a knob to change this behavior:
 ```
 set protocols bgp group eBGP-AS65503-LU multihop no-nexthop-change
 ```
-This way, when our RR will advertise the routes, the next-hop will not be changed. 
+This way, when our RR advertises the routes, the next-hop will not be changed.
 ```
 root@RR> show route advertising-protocol bgp 10.0.1.3
 
@@ -358,7 +358,7 @@ Instance: VPLS-CE5
         Description: Intf - vpls VPLS-CE5 local site 7 remote site 6
     10                        rmt   RM
 ```
-Now, the pseudowires is completely established. Let's ask the customer to test the connectivity:
+Now, the pseudowires are completely established. Let's ask the customer to test the connectivity:
 ```
 [admin@CE5-7] > ping 172.50.1.4
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -384,6 +384,6 @@ Now, the pseudowires is completely established. Let's ask the customer to test t
     1 172.50.1.6                                 56  64 12ms881us
     sent=2 received=2 packet-loss=0% min-rtt=12ms881us avg-rtt=25ms760us max-rtt=38ms639us
 ```
-Everythins is great!!!! 
+Everything is great!!!!
 
-With this, we finished our VPNs journey, and can go on Class of Services. See you in the next time, bye! 
+With this, we've finished our VPN journey, and we can move on to Class of Service. See you next time, bye!
