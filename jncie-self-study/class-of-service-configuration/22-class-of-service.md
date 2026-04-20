@@ -430,7 +430,7 @@ R3:
 set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn lsp-next-hop R3-R8-B
 set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn-priority lsp-next-hop R3-R8-A
 
-set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter fc09:c0:ffee:3:8::/126 longer
+set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter 10.3.0.0/16 longer
 set policy-options policy-statement load-balance-lsp term C3-LSP then cos-next-hop-map lsp-map
 
 set routing-options forwarding-table export load-balance-lsp
@@ -440,7 +440,7 @@ R8:
 set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn lsp-next-hop R8-R3-B
 set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn-priority lsp-next-hop R8-R3-A
 
-set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter fc09:c0:ffee:3:3::/126 longer
+set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter 10.3.0.0/16 longer
 set policy-options policy-statement load-balance-lsp term C3-LSP then cos-next-hop-map lsp-map
 
 set routing-options forwarding-table export load-balance-lsp
@@ -488,5 +488,70 @@ set firewall family any filter vpn-filter term 1 then accept
 
 set protocols mpls label-switched-path R8-R3-B policing filter vpn-filter
 ```
-And... our job is finished. Let's ask the customer to test this. 
+And... our job is finished. Now, we need to test this: 
+```
+root@R3> show route forwarding-table destination 10.3.8.0/30
+....
+Routing table: VRF-C3.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+10.3.8.0/30        user     0                    indr  1048716     3
+                                                 idxd      536     2
+                   idx:2                         ulst  1048715     2
+                              10.200.0.6        Push 17, Push 76(top)      911     2 ge-0/0/3.0
+                              10.200.0.11       Push 17, Push 85, Push 89(top)      912     2 ge-0/0/4.0
+                   idx:xx     10.200.0.13       Push 17, Push 111(top)      910     2 ge-0/0/2.0
 
+root@R8> show route forwarding-table destination 10.3.3.0/30
+....
+Routing table: VRF-C3.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+10.3.3.0/30        user     0                    indr  1048667     3
+                                                 idxd      882     2
+                   idx:2                         ulst  1048666     2
+                              10.200.0.4        Push 19, Push 55(top)      773     2 ge-0/0/3.0
+                              10.200.0.18       Push 19, Push 54, Push 110(top)      780     2 ge-0/0/2.0
+                   idx:xx     10.200.0.18       Push 19, Push 103(top)      777     2 ge-0/0/2.0
+```
+And in the customer perspective is here:
+```
+[admin@CE3-1] > tool traceroute 10.3.3.2 dscp=000000
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
+#  ADDRESS      LOSS  SENT  LAST    AVG    BEST  WORST  STD-DEV  STATUS
+1  10.3.8.1     0%       5  3.6ms   131.9  3.6   544.7  209
+2  10.200.0.18  0%       5  11ms    42.1   10.5  87     33.6     <MPLS:L=103,E=2 L=19,E=2,T=1>
+3  10.200.0.14  0%       5  23ms    18.6   11    24     5.7      <MPLS:L=106,E=2 L=19,E=2,T=2>
+4  10.3.3.1     0%       5  23.3ms  13.6   5.6   23.3   6.3
+5  10.3.3.2     0%       5  7.2ms   8.9    5.9   16.2   3.8
+
+[admin@CE3-1] > tool traceroute 10.3.3.2 dscp=000001
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
+#  ADDRESS     LOSS  SENT  LAST    AVG    BEST  WORST  STD-DEV  STATUS
+1  10.3.8.1    0%       3  4.9ms   4.2    1.9   5.8    1.7
+2  10.200.0.4  0%       3  19.9ms  18.3   12    22.9   4.6      <MPLS:L=55,E=5 L=19,E=5,T=1>
+3  10.200.0.1  0%       3  23.2ms  17.6   12.6  23.2   4.4      <MPLS:L=54,E=5 L=19,E=5,T=2>
+4  10.3.3.1    0%       3  11.4ms  178.7  11.4  480.6  213.9
+5  10.3.3.2    0%       3  10.1ms  10.6   7.5   14.2   2.8
+---------
+[admin@CE3-2] > tool traceroute 10.3.8.2 dscp=000000
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
+#  ADDRESS      LOSS  SENT  LAST    AVG    BEST  WORST  STD-DEV  STATUS
+1  10.3.3.1     0%       3  19.1ms  165.5  5.2   472.1  216.9
+2  10.200.0.13  0%       3  91.9ms  53     11    91.9   33.1     <MPLS:L=111,E=2 L=17,E=2,T=1>
+3  10.200.0.21  0%       3  17ms    56.3   10.7  141.1  60       <MPLS:L=38,E=2 L=17,E=2,T=2>
+4  10.3.8.1     0%       3  14.5ms  11.4   8.2   14.5   3.2
+5  10.3.8.2     0%       2  13.4ms  11.5   9.6   13.4   1.9
+
+[admin@CE3-2] > tool traceroute 10.3.8.2 dscp=000001
+Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
+#  ADDRESS     LOSS  SENT  LAST     AVG   BEST  WORST  STD-DEV  STATUS
+1  10.3.3.1    0%       3  9.2ms    7.4   2.6   10.3   3.4
+2  10.200.0.6  0%       3  30.7ms   20.6  11    30.7   8        <MPLS:L=76,E=5 L=17,E=5,T=1>
+3  10.200.0.0  0%       3  107.6ms  43.1  10.8  107.6  45.6     <MPLS:L=85,E=5 L=17,E=5,T=2>
+4  10.3.8.1    0%       3  123ms    86.2  49.4  123    36.8
+5  10.3.8.2    0%       2  7ms      20.5  7     33.9   13.5
+```
+On the traffic with BE DSCP, the routers forwards the traffic trough the LSPs A, and on the traffic with another DSCP value, the routers forwards the traffic trough LSPs B!!! It's so cool man. 
+
+With this, we finished our JNCIE-SP journey. I liked a lot to write all the artcles and sure, I learn so much here. Thank you for follow and read until here. See you soon. 
