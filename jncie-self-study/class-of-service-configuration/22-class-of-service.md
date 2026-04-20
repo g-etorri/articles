@@ -362,3 +362,131 @@ Before start with the classifiers configuration, let's remember what types of cl
 * Behavior Aggregate: This classifier considers the QoS fields on the packets to classify the traffic, in our LAB we'll use the DSCP field and EXP bit of the MPLS header. Based on the code-points-alias that we created, the traffic will be classified. Generally, this classifier is used on CORE/Backbone interfaces.
 * Multifield Classifier: This classifier can consider a lot of things to classify the traffic, considered the most granulated. Is basically a firewall filter rule, where we can define source, destination, protocol, port and so on... This classifier is applied on the interface, and if is applied with the BA classifier, overwrite it. Generally is used on PE-CE interfaces, trunk interfaces and another type of services that needs a most granulated classifier.
 
+Ok, with this defined, our classifiers can read this fields to classify this packets. Starting by the CORE interfaces, we'll use the BA classifier.
+```
+set class-of-service classifiers dscp dscp-classifier forwarding-class best-effort loss-priority low code-points best-effort
+set class-of-service classifiers dscp dscp-classifier forwarding-class nc loss-priority low code-points nc
+set class-of-service classifiers dscp dscp-classifier forwarding-class vpn loss-priority high code-points vpn-high
+set class-of-service classifiers dscp dscp-classifier forwarding-class vpn loss-priority low code-points vpn-low
+set class-of-service classifiers dscp dscp-classifier forwarding-class vpn-priority loss-priority low code-points vpn-priority
+
+set class-of-service classifiers exp exp-classifier forwarding-class best-effort loss-priority low code-points best-effort
+set class-of-service classifiers exp exp-classifier forwarding-class vpn loss-priority high code-points vpn-high
+set class-of-service classifiers exp exp-classifier forwarding-class vpn loss-priority low code-points vpn-low
+set class-of-service classifiers exp exp-classifier forwarding-class vpn-priority loss-priority low code-points vpn-priority
+
+set class-of-service interfaces ge-0/0/2 unit 0 classifiers dscp dscp-classifier
+set class-of-service interfaces ge-0/0/2 unit 0 classifiers exp exp-classifier
+set class-of-service interfaces ge-0/0/3 unit 0 classifiers dscp dscp-classifier
+set class-of-service interfaces ge-0/0/3 unit 0 classifiers exp exp-classifier
+set class-of-service interfaces ge-0/0/4 unit 0 classifiers dscp dscp-classifier
+set class-of-service interfaces ge-0/0/4 unit 0 classifiers exp exp-classifier
+set class-of-service interfaces ae0 unit 0 classifiers dscp dscp-classifier
+set class-of-service interfaces ae0 unit 0 classifiers exp exp-classifier
+```
+In the configuration until here, you can see that when the packets enters trough the interface, the Junos will classify the packet by the DSCP or EXP value, and bind this in a forwarding-class, and when the packet is in a forwarding-class, it will receive the treatment accordingly the scheduler of forwarding-class that was mapped by the scheduler-map. 
+
+To guarantee that the packets will be transmited with the correct DSCP or EXP bit on the CORE interfaces, we can use the rewrite-rules. With this configuration, the DSCP bit will be marked on the network protocols and preserved if the packets will be routed on the network. In case of MPLS services, with this the PE will mark the EXP bit accordingly the forwarding-class of the traffic, and on the P routers, this rule will guarantee that the packets will have the EXP bits marked. 
+```
+set class-of-service interfaces ge-0/0/2 unit 0 rewrite-rules dscp dscp-rewriter
+set class-of-service interfaces ge-0/0/2 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
+set class-of-service interfaces ge-0/0/3 unit 0 rewrite-rules dscp dscp-rewriter
+set class-of-service interfaces ge-0/0/3 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
+set class-of-service interfaces ge-0/0/4 unit 0 rewrite-rules dscp dscp-rewriter
+set class-of-service interfaces ge-0/0/4 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
+set class-of-service interfaces ae0 unit 0 rewrite-rules dscp dscp-rewriter
+set class-of-service interfaces ae0 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
+```
+
+Now, our backbone is ready to receive the QoS services. To simulate a deploy of CoS, we'll use the Customer 3. Remembering the topology:
+<img width="1617" height="1097" alt="image" src="https://github.com/user-attachments/assets/e795421d-5647-49b9-920b-30106d30e3b1" />
+
+This customer will have two types of traffic, the normal vpn traffic, and the prioritary vpn traffic. See the table:
+```
+| Type of Traffic | Criterion                    | Forwarding Class |
+| --------------- | ---------------------------- | ---------------- |
+| VPN normal      | DSCP 0B000000                | vpn              |
+| VPN prioritary  | Any other DSCP value         | vpn-priority     |
+```
+The DSCP value is equal as the BE value of our configuration. So, we can go to the classifier. In the PE-CE interface, to classify two different forwarding-classes, we need to use a MF classifier:
+```
+set firewall family inet filter classifier-c3 term 1 from dscp be
+set firewall family inet filter classifier-c3 term 1 then forwarding-class vpn
+set firewall family inet filter classifier-c3 term 1 then accept
+set firewall family inet filter classifier-c3 term 2 then forwarding-class vpn-priority
+set firewall family inet filter classifier-c3 term 2 then accept
+
+set interfaces ge-0/0/8 unit 300 family inet filter input classifier-c3
+```
+The configuration is intuitive, when the packets have the BE DSCP value, it belongs to vpn forwarding-class. And in the second term, all the packets belongs to the vpn-priority forwarding-class. 
+
+With the actual configuration, the traffic of the customer will be treated in congestion or micro-bursts moments, having preference on the vpn-priority packets. But the CoS is not just this. We can split the traffic into the two LSPs between the PEs, accordingly the type of traffic and limit the traffic with policers also! 
+
+Our goal here is, forward the traffic of normal VPN trough LSPs B, and the prioritary VPN traffic trough LSPs A. And limit this traffic into the reserved bandwitdh by the LSP, that is 60Mbps, but, to differentiate the things, and to learn something more, the excedent traffic of the vpn-priority will be discarted, and the normal VPN this traffic will have a high loss-priority. 
+
+Starting with the LSP mapping: 
+R3:
+```
+set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn lsp-next-hop R3-R8-B
+set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn-priority lsp-next-hop R3-R8-A
+
+set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter fc09:c0:ffee:3:8::/126 longer
+set policy-options policy-statement load-balance-lsp term C3-LSP then cos-next-hop-map lsp-map
+
+set routing-options forwarding-table export load-balance-lsp
+```
+R8:
+```
+set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn lsp-next-hop R8-R3-B
+set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn-priority lsp-next-hop R8-R3-A
+
+set policy-options policy-statement load-balance-lsp term C3-LSP from route-filter fc09:c0:ffee:3:3::/126 longer
+set policy-options policy-statement load-balance-lsp term C3-LSP then cos-next-hop-map lsp-map
+
+set routing-options forwarding-table export load-balance-lsp
+```
+We create a ```next-hop-map lsp-map``` in CoS configuration, ah call this on the policy applied on the forwarding-table. With this the traffic will be splitted accordingly. 
+
+Now, to limit this traffic and apply the rules, we need to create a policer and apply this on the LSP: 
+R3:
+```
+set firewall policer vpn-priority-policer if-exceeding bandwidth-limit 60m
+set firewall policer vpn-priority-policer if-exceeding burst-size-limit 56k
+set firewall policer vpn-priority-policer then discard
+
+set firewall family any filter vpn-priority-filter term 1 then policer vpn-priority-policer
+set firewall family any filter vpn-priority-filter term 1 then accept
+
+set protocols mpls label-switched-path R3-R8-A policing filter vpn-priority-filter
+--------------
+set firewall policer vpn-policer if-exceeding bandwidth-limit 60m
+set firewall policer vpn-policer if-exceeding burst-size-limit 56k
+set firewall policer vpn-policer then loss-priority high
+
+set firewall family any filter vpn-filter term 1 then policer vpn-policer
+set firewall family any filter vpn-filter term 1 then accept
+
+set protocols mpls label-switched-path R3-R8-B policing filter vpn-filter
+```
+R8:
+```
+set firewall policer vpn-priority-policer if-exceeding bandwidth-limit 60m
+set firewall policer vpn-priority-policer if-exceeding burst-size-limit 56k
+set firewall policer vpn-priority-policer then discard
+
+set firewall family any filter vpn-priority-filter term 1 then policer vpn-priority-policer
+set firewall family any filter vpn-priority-filter term 1 then accept
+
+set protocols mpls label-switched-path R8-R3-A policing filter vpn-priority-filter
+--------------
+set firewall policer vpn-policer if-exceeding bandwidth-limit 60m
+set firewall policer vpn-policer if-exceeding burst-size-limit 56k
+set firewall policer vpn-policer then loss-priority high
+
+set firewall family any filter vpn-filter term 1 then policer vpn-policer
+set firewall family any filter vpn-filter term 1 then accept
+
+set protocols mpls label-switched-path R8-R3-B policing filter vpn-filter
+```
+And... our job is finished. Let's ask the customer to test this. 
+
