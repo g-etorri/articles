@@ -1,27 +1,27 @@
 # VPN Inter-Provider Option B Configuration
 
-Hello guys, I hope everyone is well! 
+Hello guys, I hope everyone is doing well!
 
-Today, we'll start to explore Inter-AS VPNs. In this scenario, let's simulate that we have acquired the P3. So, now we must provide the L3VPN to Site 5 of Customer 3. 
+Today, we'll start exploring Inter-AS VPNs. In this scenario, let's simulate that we have acquired P3. So, now we need to provide L3VPN connectivity to Site 5 of Customer 3.
 
-Here is topology that we'll use today: 
+Here is the topology we'll use today:
 <img width="1365" height="1022" alt="image" src="https://github.com/user-attachments/assets/57481a76-4d65-48a5-8c4c-5da442224ac1" />
 
-How the title says, today we'll use the Inter-AS Option B method. In this case of L3VPN, we don't need to terminate the service on the interface, but we need to have the L3VPN routes to export to our external peering. 
+As the title says, today we'll use the Inter-AS Option B method. For this L3VPN case, we don't need to terminate the service on the interface, but we do need the L3VPN routes to export to our external peering.
 
-Starting, we need to receive the L3VPN routes on R3. Remembering that we have the route-target family configured, we need to add the knob ```advertise-default```, this way we'll advertise to RR that we want to receive routes with any RT. 
+To start, we need to receive the L3VPN routes on R3. Keeping in mind that we have the route-target family configured, we need to add the ```advertise-default``` knob. This way, we'll advertise to the RR that we want to receive routes with any RT.
 ```
 set protocols bgp group iBGP-AS65020-East family route-target advertise-default
 ```
 
-Ok, now let's configure the peering with P3, remebering that we need to have the MPLS configured in the interface to process packets with MPLS header.
+Ok, now let's configure the peering with P3. Remember that we need MPLS configured on the interface to process packets with an MPLS header.
 ```
 set interfaces ge-0/0/6 unit 302 family mpls
 set protocols mpls interface ge-0/0/6.302
 set protocols bgp group eBGP-AS65503-Provider3 family inet-vpn unicast
 ```
 
-Let's check our adjacency and the advertisements: 
+Let's check our adjacency and the advertisements:
 ```
 root@R3> show bgp summary group eBGP-AS65503-Provider3
 Threading mode: BGP I/O
@@ -88,9 +88,9 @@ bgp.l3vpn.0: 72 destinations, 72 routes (72 active, 0 holddown, 0 hidden)
   10.2.30.254:201:10.2.30.254/32
 *                         172.16.3.6                              65503 I
 ```
-Ok, both routers are advertising the VPN routes, as expected. 
+Ok, both routers are advertising the VPN routes as expected.
 
-Everything looks so easy! Let's check the routing-table of the VRF: 
+Everything looks so easy! Let's check the routing table of the VRF:
 ```
 root@R1> show route table VRF-C2-SPOKE.inet.0
 
@@ -137,11 +137,11 @@ VRF-C2-SPOKE.inet.0: 15 destinations, 20 routes (14 active, 0 holddown, 6 hidden
                       AS path: 64702 I, validation-state: unverified
                     >  to 10.200.0.3 via ge-0/0/2.0, Push 19
 ```
-Oh, something is wrong here, we are not receiving the routes on R1. To start the tshoot, let's check the route-targets: 
+Oh, something is wrong here; we are not receiving the routes on R1. To start troubleshooting, let's check the route targets:
 ```
 set routing-instances VRF-C2-SPOKE vrf-target target:65020:201
 ```
-The RT of spoke sites, needs to be ```target:65020:201```. Now, let's check what we are receiving from P3: 
+The RT for the spoke sites needs to be ```target:65020:201```. Now, let's check what we are receiving from P3:
 ```
 root@R3> show route receive-protocol bgp 172.16.3.6 table bgp.l3vpn detail
 
@@ -162,9 +162,9 @@ bgp.l3vpn.0: 72 destinations, 72 routes (72 active, 0 holddown, 0 hidden)
      AS path: 65503 I
      Communities: target:65503:2
 ```
-Hum, we found the problem. If you notice here, P3 is advertising the routes with another RT. We need to normalizate this advertisements to provide the connection between the sites. 
+Hmm, we found the problem. If you notice here, P3 is advertising the routes with a different RT. We need to normalize these advertisements to provide connectivity between the sites.
 
-To do this, we need to create the RT communities, and do a normalization trough the routing-policies: 
+To do this, we need to create the RT communities and perform normalization through routing policies:
 ```
 set policy-options community target-ce2-hub members target:65020:200
 set policy-options community target-ce2-spoke members target:65020:201
@@ -178,7 +178,7 @@ set policy-options policy-statement Entrada-P3 term bgpl3vpn from community targ
 set policy-options policy-statement Entrada-P3 term bgpl3vpn then community add target-ce2-spoke
 set policy-options policy-statement Entrada-P3 term bgpl3vpn then accept
 ```
-Now, we can found these routes with the correct RT:
+Now, we can find these routes with the correct RT:
 ```
 root@R3> show route table bgp.l3vpn.0 community target:65020:201 match-prefix 10.2.30.254*
 
@@ -195,7 +195,7 @@ bgp.l3vpn.0: 69 destinations, 69 routes (69 active, 0 holddown, 0 hidden)
                     >  to 172.16.3.6 via ge-0/0/6.302, Push 16
 ```
 
-Now, let's check the VRF routing-table:
+Now, let's check the VRF routing table:
 ```
 root@R1> show route table VRF-C2-SPOKE.inet.0
 
@@ -250,9 +250,9 @@ VRF-C2-SPOKE.inet.0: 17 destinations, 22 routes (16 active, 0 holddown, 6 hidden
                       AS path: 64702 I, validation-state: unverified
                     >  to 10.200.0.3 via ge-0/0/2.0, Push 19
 ```
-And, everything looks great now!!!
+And everything looks great now!!!
 
-Let's ask customer to make the connectivity tests and we can confirm the delivery of the service:
+Let's ask the customer to run some connectivity tests so we can confirm the service delivery:
 ```
 [admin@CE2-6] > ping 10.2.0.1
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -275,7 +275,7 @@ Let's ask customer to make the connectivity tests and we can confirm the deliver
     2                                                              no route to host
     sent=3 received=0 packet-loss=100%
 ```
-This is the result. If you are a good observer, you notice a little detail of the topology. 
+This is the result. If you are a good observer, you'll notice a little detail in the topology.
 ```
 root@R3> show route advertising-protocol bgp 172.16.3.6 table bgp.l3vpn
 
@@ -326,15 +326,15 @@ bgp.l3vpn.0: 69 destinations, 69 routes (69 active, 0 holddown, 0 hidden)
   10.0.0.3:100:10.1.23.0/30
 *                         Self                 2                  I
 ```
-You can notice here that we are not advertising the default route from HUB sites... This is happening because in the other PEs we include a simple, but crucial configuration. 
+You can notice here that we are not advertising the default route from the HUB sites... This is happening because we need to include a simple but crucial configuration.
 ```
 set routing-options autonomous-system 65020 loops 3
 ```
-In the HUB site, the CEs receive the default route from a BGP session with R1 and R2, but when this route is readvertised into the VRF-HUB, our own AS is on AS-PATH, and the as-override will not remove the AS this time, because this tiny detail, we need to add the as-loops on the PEs. We can add this on all routers of the network btw. 
+At the HUB site, the CEs receive the default route from a BGP session with R1 and R2. But when this route is readvertised into the VRF-HUB, our own AS is in the AS-PATH. The ```as-override``` feature won't remove the AS this time. Because of this tiny detail, we need to configure ```as-loops``` on the PEs. We can add this on all routers in the network, by the way.
 ```
 set routing-options autonomous-system 65020 loops 3
 ```
-Now, we would receive and advertise the default route: 
+Now, we should receive and advertise the default route:
 ```
 root@R3> show route advertising-protocol bgp 172.16.3.6 table bgp.l3vpn
 
@@ -365,7 +365,7 @@ bgp.l3vpn.0: 71 destinations, 71 routes (71 active, 0 holddown, 0 hidden)
   10.0.0.2:200:10.2.2.254/32
 *                         Self                                    I
 ```
-Now, everything looks perfect, literally. We can ask the customer to test again. 
+Now, everything looks perfect, literally. We can ask the customer to test again.
 ```
 [admin@CE2-6] > ping 10.2.0.1
   SEQ HOST                                     SIZE TTL TIME       STATUS
@@ -415,6 +415,6 @@ Now, everything looks perfect, literally. We can ask the customer to test again.
     2 10.2.0.5                                   56  59 14ms799us
     sent=3 received=3 packet-loss=0% min-rtt=14ms799us avg-rtt=19ms202us max-rtt=24ms880us
 ```
-And... success!!! Service is delivered. 
+And... success!!! Service is delivered.
 
-In the next article, we'll explore the Inter-AS Option C. BGP-LU is fantastic, and in my list BGP-LU only os below EVPN! See you next time homie. 
+In the next article, we'll explore Inter-AS Option C. BGP-LU is fantastic, and on my list, BGP-LU is only second to EVPN! See you next time, homie.
