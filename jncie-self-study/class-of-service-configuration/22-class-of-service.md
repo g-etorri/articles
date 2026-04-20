@@ -1,21 +1,21 @@
 # Class of Service
 
-Hello guys, I hope everyone is well today. 
+Hello guys, I hope everyone is doing well today.
 
-This is the start of the end of the JNCIE-SP journey, abording the Class of Service topic. 
+This is the beginning of the end of our JNCIE-SP journey, tackling the Class of Service topic.
 
-The topology you already know:
+Here is the topology you already know:
 <img width="1060" height="791" alt="image" src="https://github.com/user-attachments/assets/909f3acc-3d7f-4ee0-a9ce-9dcc5f4a0886" />
 
-In this artcile, I'll explore all CoS flow. Classifying the traffic, treating it and forwarding. Writing the flow makes all the things more simple, but this is like a puzzle, and we need to fit the pieces. 
+In this article, I'll explore the entire CoS flow: classifying the traffic, treating it, and forwarding it. Writing out the flow makes things simpler, but it's like a puzzle, and we need to fit the pieces together.
 
-First, let's define the queues and the schedulers, this way we define where the traffic will be, and which way the traffic will be treated. In Junos we have 8 queues by default in MX devices, so we can have 8 types of traffic in an interface, we can change the queues applied on each interface but this aren't considered a good practice. 
+First, let's define the queues and the schedulers; this way, we define where the traffic will go and how it will be treated. In Junos, we have 8 queues by default on MX devices, meaning we can have 8 types of traffic on a single interface. We can change the number of queues applied to each interface, but this isn't considered good practice.
 
-Another different concept in Junos is the Class of Service concept. Class of Service is considered the configuration in each device of the network, and the whole configuration in the network, is considered the Quality of Service. So here, we area configuring the Class of Service in each router, forming our QoS standard. Got it? 
+Another unique concept in Junos is the difference between Class of Service and Quality of Service. Class of Service refers to the configuration on each individual device, while the overarching configuration across the entire network is considered Quality of Service (QoS). So here, we are configuring the CoS on each router to form our network-wide QoS standard. Got it?
 
-So, let's go to the forwarding classes configuration. The forwarding classes are basically the queues of our router, in other words we are definiying in a specific term the queue.
+So, let's move on to the forwarding classes configuration. The forwarding classes are essentially the queues of our router; in other words, we are defining the queue in specific terms.
 
-We'll create 4 forwarding-classes in our network, the best-effort that is the default queue of any traffic of the network. The VPN forwarding-class, any VPN service will be in this queue. The VPN-Priority forwarding-class, a service of VPN that needs priority will be here, and finally, the Network Control forwarding-class, for the most prioritary traffic in our network, the network protocols uses this queue. See here: 
+We'll create 4 forwarding classes in our network: the ```best-effort``` class, which is the default queue for any general traffic; the ```vpn``` forwarding class, where any standard VPN service will sit; the ```vpn-priority``` forwarding class, for VPN services that require priority; and finally, the ```nc``` (Network Control) forwarding class, for the highest priority traffic in our network (network protocols use this queue). See here:
 | Forwarding Class | Queue |
 | ---------------- | ----- | 
 | best-effort      | 0     | 
@@ -23,14 +23,14 @@ We'll create 4 forwarding-classes in our network, the best-effort that is the de
 | vpn-priority     | 2     | 
 | nc               | 3     |
 
-The forwarding-class is equivalent as a queue. Let's create them on all routers:
+The forwarding class is equivalent to a queue. Let's create them on all routers:
 ```
 set class-of-service forwarding-classes queue 0 best-effort
 set class-of-service forwarding-classes queue 1 vpn
 set class-of-service forwarding-classes queue 2 vpn-priority
 set class-of-service forwarding-classes queue 3 nc
 ```
-Let's check the forwarding-classes existent: 
+Let's check the existing forwarding classes:
 ```
 root@R1> show class-of-service forwarding-class
 Forwarding class                       ID      Queue  Restricted queue  Fabric priority  Policing priority   SPU priority
@@ -39,9 +39,9 @@ Forwarding class                       ID      Queue  Restricted queue  Fabric p
   vpn-priority                          2       2          2             high               normal            low
   nc                                    3       3          3             high               normal            low
 ```
-Okay, with the forwarding-classes defined, we can go to the schedulers. Schedulers are responsible to treat the traffic, defining the loss-priority of the traffic, transmit rate, buffer size reserved to this traffic, drop profiles and so on... 
+Okay, with the forwarding classes defined, we can move on to the schedulers. Schedulers are responsible for treating the traffic—defining the loss priority, transmit rate, buffer size reserved for this traffic, drop profiles, and so on.
 
-Let's define the schedulers accordingly the table: 
+Let's define the schedulers according to the table:
 | Scheduler     | Parameter            | Value       |
 | ------------- | -------------------- | ----------- |
 | be-sc-q0      | Priority             | low         |
@@ -60,7 +60,7 @@ Let's define the schedulers accordingly the table:
 | nc-sc-q3      | Transmit Rate        | 5%          |
 | nc-sc-q3      | Buffer Size          | 5%          |
 
-You can see in the table that we have a parameter defined as drop profile, this is a method that uses a technique called Weighted Random Early Detection, or WRED. This is used to avoid the queue will be 100% full and locks. Let's define this profiles to explain the queues better. 
+You can see in the table that we have a parameter defined as "drop profile". This is a method that uses a technique called Weighted Random Early Detection, or WRED. This is used to prevent the queue from becoming 100% full and locking up. Let's define these profiles to explain the queues better.
 | Profile | Fill Level | Drop Probability | 
 | - | - | - |
 | low-drop | 25 | 5 |
@@ -70,7 +70,7 @@ You can see in the table that we have a parameter defined as drop profile, this 
 | high-drop | 50 | 30 |
 | high-drop | 75 | 65 | 
 
-Basically, when we have a congestion or micro-burst on the interface, basically when the routers can't forward the packets in the same way that it is arriving, the queue is filling and the drop-profile is used to discard the packets accordingly the fill level. In the low-drop, when the queue is 25% filled, 5% of this traffic will be radomly dropped, this is considered a conservative profile, the high-drop is agressive, and when we have 25% of the queue filled, 10% of the traffic will be radomly dropped. 
+Basically, when we have congestion or a micro-burst on the interface—meaning the router can't forward the packets as fast as they are arriving—the queue starts filling up, and the drop profile is used to discard packets according to the fill level. In the low-drop profile, when the queue is 25% full, 5% of this traffic will be randomly dropped; this is considered a conservative profile. The high-drop profile is aggressive, so when the queue is 25% full, 10% of the traffic will be randomly dropped.
 
 Let's configure this on all routers:
 ```
@@ -88,7 +88,7 @@ set class-of-service drop-profiles high-drop interpolate drop-probability 10
 set class-of-service drop-profiles high-drop interpolate drop-probability 30
 set class-of-service drop-profiles high-drop interpolate drop-probability 65
 ```
-This interpolate configuration turns this in a gradative dropping, accordingly the fill level:
+This ```interpolate``` configuration turns this into a gradual dropping mechanism, adjusting smoothly according to the fill level:
 ```
 root@R8> show class-of-service drop-profile
 Drop profile: <default-drop-profile>, Type: discrete, Index: 1
@@ -227,12 +227,12 @@ Drop profile: low-drop, Type: interpolated, Index: 59912
           99                  97
          100                 100
 ```
-Here we have the fill level and drop proabibility side-by-side, and transforming this in a graphic, we can see it better:
+Here we have the fill level and drop probability side-by-side, and by transforming this into a graph, we can visualize it better:
 <img width="680" height="790" alt="image" src="https://github.com/user-attachments/assets/9279c6ff-397f-46dd-a616-0ce2bdff03ff" />
 
-With the images, everything looks better to understand. So, some classes will have a conservative drop-profile, and other an agresssive. 
+With the images, everything is much easier to understand! So, some classes will have a conservative drop profile, and others will have an aggressive one.
 
-Now, we can go back to schedulers applying this in all routers:  
+Now, we can go back to our schedulers and apply this across all routers:
 ```
 set class-of-service schedulers be-sc-q0 transmit-rate remainder
 set class-of-service schedulers be-sc-q0 buffer-size remainder
@@ -253,36 +253,36 @@ set class-of-service schedulers nc-sc-q3 transmit-rate percent 5
 set class-of-service schedulers nc-sc-q3 buffer-size percent 5
 set class-of-service schedulers nc-sc-q3 priority high
 ```
-Let's explain the queues now: 
-* Best-effort: The transmit-rate specify what is the CIR, or guaranted bandwidth, and this class don't have, it will use the remainder bandwidth in the interface that is not allocated to the other queues. The buffer-size specify the size of queue on memory, and also will use the remainder. In both cases, transmit-rate and buffer-size, this queue can borrow the capacity of the other queues if it's not in use. Priority defines literally the priority of the traffic, and the drop-profile-map sets that this queue will use the high-drop profile to drop the packets with any loss-priority.
+Let's break down the queues now:
+* Best-effort: The ```transmit-rate``` specify what is the CIR, or guaranted bandwidth, and this class don't have, it will use the remainder bandwidth in the interface that is not allocated to the other queues. The ```buffer-size``` specify the size of queue on memory, and also will use the remainder. In both cases, transmit-rate and buffer-size, this queue can borrow the capacity of the other queues if it's not in use. ```Priority``` defines literally the priority of the traffic, and the ```drop-profile-map``` sets that this queue will use the ```high-drop``` profile to drop the packets with any loss-priority.
 
-Note: Loss-priority is like a internal tag that Junos uses to classify which packet it can drops first. The loss-priority aren't marked in any field of the packet, is literally a internal feature that mark the packets when enter in the router, and is used to decide when the packet can be dropped. The loss-priority is marked on classifiers and we'll see it later. 
+Note: Loss priority is like an internal tag that Junos uses to classify which packets it can drop first. The loss priority isn't explicitly marked in any field of the actual packet; it is purely an internal feature that marks packets as they enter the router, helping the router decide when a packet can be dropped. The loss priority is set by classifiers, which we'll look at later.
 
-* VPN: The transmit-rate will have a guarantee of 20% of the interface bandwidth, and 20% of memory. The priority of this traffic will be medium-low, and here we will uses two drop-profiles, for the packets with loss-priority low, the low-drop will be used, and for the packets with high loss-priority, the high-drop will be used.
+* VPN: This class has a guarantee of 20% of the interface bandwidth and 20% of the buffer memory. The priority of this traffic is ```medium-low```, and here we use two drop profiles: for packets with a low loss priority, ```low-drop``` will be used. For packets with a high loss priority, ```high-drop``` will be used.
 
-* VPN Priority: This class can be used for sensible services, like VoIP or streamings. Here we'll gurantee 10% of interface bandwidth and the buffer-size is different, when it comes to sensible services, we are talking about latency and jitter, here we are definying that the packets can stay in memory for 5ms or it will be dropped, considering the latency, the packet can be useless and no makes senses to mantain this on buffer. The priority is defined in medium-high.
+* VPN Priority: This class is meant for sensitive services, like VoIP or real-time streaming. Here we guarantee 10% of the interface bandwidth, but the buffer size is handled differently. When dealing with sensitive services, we are primarily concerned with latency and jitter. Here, we are defining that packets can stay in the memory buffer for a maximum of 5ms before being dropped. If latency is too high, the packet becomes useless, so it makes no sense to keep it in the buffer. The priority is set to ```medium-high```.
 
-* Network Control: Here we have the most prioritary traffic, we'll gurantee 5% of interface bandwidth and buffer, and the priority is high.
+* Network Control: Here we have the highest priority traffic. We guarantee 5% of the interface bandwidth and buffer, and the priority is ```high```.
 
-Now, to appply this schedulers onto forwarding-classes, we need to use the sheduler-maps, the scheduler-maps are responsible to link the forwarding-class with a scheduler basically. 
+Now, to apply these schedulers to our forwarding classes, we need to use scheduler-maps. Scheduler maps are essentially responsible for linking a forwarding class to a specific scheduler.
 ```
 set class-of-service scheduler-maps bkb-interfaces forwarding-class best-effort scheduler be-sc-q0
 set class-of-service scheduler-maps bkb-interfaces forwarding-class nc scheduler nc-sc-q3
 set class-of-service scheduler-maps bkb-interfaces forwarding-class vpn scheduler vpn-sc-q1
 set class-of-service scheduler-maps bkb-interfaces forwarding-class vpn-priority scheduler vpn-pri-sc-q2
 ```
-This way, the traffic in a forwarding-class, will have the scheduler treatment correctly. 
+This way, the traffic within a forwarding class will receive the correct scheduler treatment.
 
-Now, to apply this queues in the backbone interfaces, we need to do this: 
+Now, to apply these queues to the backbone interfaces, we execute the following:
 ```
 set class-of-service interfaces ge-0/0/2 scheduler-map bkb-interfaces
 set class-of-service interfaces ge-0/0/3 scheduler-map bkb-interfaces
 set class-of-service interfaces ge-0/0/4 scheduler-map bkb-interfaces
 set class-of-service interfaces ae0 scheduler-map bkb-interfaces
 ```
-Here I applied the configuration on R1, but we have to apply this on all routers similarly. 
+Here, I applied the configuration on R1, but we have to apply this to all routers similarly.
 
-To check if the configuration is correctly applied, we can see the output:
+To verify if the configuration is applied correctly, we can check this output:
 ```
 root@R8> show class-of-service scheduler-map bkb-interfaces
 Scheduler map: bkb-interfaces, Index: 28224
@@ -327,13 +327,16 @@ Scheduler map: bkb-interfaces, Index: 28224
       Medium high     any             1    <default-drop-profile>
       High            any             1    <default-drop-profile>
 ```
-Everything looks good!!! And in this output we can see what drop-profiles are used for each loss-priority type of the packets. Notice in the best-effort the high-drop is used to any loss-profile, and in the vpn class, the drop-profiles is used on packets with loss-priority low and high, but in the mediums priorities the drop-profile used is the default, in other words, the packets with medium LP are dropped only when the queue is 100% full. 
+Everything looks good!!! In this output, we can see exactly which drop profiles are used for each loss-priority type. Notice that for best-effort, high-drop is used for any loss profile. For the vpn class, the custom drop profiles are used on packets with low and high loss priorities, but for medium priorities, the default drop profile is used (meaning those packets are only dropped when the queue is 100% full).
 
-Now, we can go to the classification, policing and marking. We can define each step, the classification is when the packets are entering the router, so based in some BITS of the packet we can classify the traffic, with the DSCP for example. The policing is defined in limit the traffic with policers, so we can limit a type of traffic in 5Mbps for example, and the marking is when the packet is leaving the router, when the route apply the rewrite-rule, to guarantee the DSCP value, or transforming the DSCP value in EXP bits in a MPLS header. 
+Now, we can move on to classification, policing, and marking. 
+* Classification: Happens when packets enter the router. Based on certain bits in the packet (like the DSCP field), we classify the traffic.
+* Policing: Involves limiting the traffic with policers. For example, we can cap a specific type of traffic at 5Mbps.
+* Marking: Happens when the packet is leaving the router. The router applies rewrite rules to guarantee the DSCP value is correct or translates the DSCP value into EXP bits in an MPLS header.
 
-Now, we'll verify this steps with more details. 
+Let's look at these steps in more detail.
 
-First, let's define the values of the DSCP and EXP bits that our packets will have to classify them correcty. See this table:
+First, let's define the values of the DSCP and EXP bits that our packets will need to be classified correctly. See this table:
 | Forwarding Class | Loss Priority | Valor DSCP | Valor EXP |
 | ---------------- | ------------- | ---------- | --------- |
 | best-effort      | any           | 0b000000   | 0b000     |
@@ -341,9 +344,10 @@ First, let's define the values of the DSCP and EXP bits that our packets will ha
 | vpn-high         | high          | 0b001100   | 0b011     |
 | vpn-priority     | any           | 0b101110   | 0b101     |
 | nc               | any           | 0b110000   | N/A       |
-Notice the Network Control will not have EXP bit defined, because the network protocols will not run on MPLS network. Except the LDP with ldp-tunneling, but this is a special case in our lab. 
 
-We need to define this values with alias, to call them on the configuration:
+Notice that Network Control doesn't have an EXP bit defined, because network protocols generally don't run over the MPLS network. The exception is LDP with LDP-tunneling, but that is a special case in our lab.
+
+We need to define these values using aliases so we can call them in the configuration:
 ```
 set class-of-service code-point-aliases dscp best-effort 000000
 set class-of-service code-point-aliases dscp nc 110000
@@ -357,12 +361,12 @@ set class-of-service code-point-aliases exp vpn-low 010
 set class-of-service code-point-aliases exp vpn-priority 101
 ```
 
-Before start with the classifiers configuration, let's remember what types of classifiers we have. 
-* Interface Classifier: This is the most simple classifier, basically it classifies all the traffic in the interface. Generally, this classifier is used on PE-CE interfaces. 
-* Behavior Aggregate: This classifier considers the QoS fields on the packets to classify the traffic, in our LAB we'll use the DSCP field and EXP bit of the MPLS header. Based on the code-points-alias that we created, the traffic will be classified. Generally, this classifier is used on CORE/Backbone interfaces.
-* Multifield Classifier: This classifier can consider a lot of things to classify the traffic, considered the most granulated. Is basically a firewall filter rule, where we can define source, destination, protocol, port and so on... This classifier is applied on the interface, and if is applied with the BA classifier, overwrite it. Generally is used on PE-CE interfaces, trunk interfaces and another type of services that needs a most granulated classifier.
+Before starting with the classifier configuration, let's review the types of classifiers we have:
+* Interface Classifier: The simplest classifier. It essentially classifies all traffic entering an interface. Generally, this is used on PE-CE interfaces.
+* Behavior Aggregate: This classifier looks at the QoS fields on the packets (in our lab, the DSCP field and the MPLS EXP bits) to classify the traffic. Traffic is classified based on the code-point aliases we just created. Generally, this is used on CORE/Backbone interfaces.
+* Multifield Classifier: This is the most granular classifier. It's basically a firewall filter rule where we can match based on source, destination, protocol, port, etc. It is applied directly to the interface, and if applied alongside a BA classifier, the MF classifier overwrites it. It's generally used on PE-CE interfaces, trunk interfaces, or any service needing deep granularity.
 
-Ok, with this defined, our classifiers can read this fields to classify this packets. Starting by the CORE interfaces, we'll use the BA classifier.
+Okay, with that defined, our classifiers can read these fields to sort the packets. Starting with the CORE interfaces, we'll use the BA classifier:
 ```
 set class-of-service classifiers dscp dscp-classifier forwarding-class best-effort loss-priority low code-points best-effort
 set class-of-service classifiers dscp dscp-classifier forwarding-class nc loss-priority low code-points nc
@@ -384,9 +388,9 @@ set class-of-service interfaces ge-0/0/4 unit 0 classifiers exp exp-classifier
 set class-of-service interfaces ae0 unit 0 classifiers dscp dscp-classifier
 set class-of-service interfaces ae0 unit 0 classifiers exp exp-classifier
 ```
-In the configuration until here, you can see that when the packets enters trough the interface, the Junos will classify the packet by the DSCP or EXP value, and bind this in a forwarding-class, and when the packet is in a forwarding-class, it will receive the treatment accordingly the scheduler of forwarding-class that was mapped by the scheduler-map. 
+Up to this point in the configuration, when packets enter through an interface, Junos will classify them by their DSCP or EXP value and bind them to a forwarding class. Once the packet is in a forwarding class, it receives treatment according to the scheduler that was mapped via the scheduler map.
 
-To guarantee that the packets will be transmited with the correct DSCP or EXP bit on the CORE interfaces, we can use the rewrite-rules. With this configuration, the DSCP bit will be marked on the network protocols and preserved if the packets will be routed on the network. In case of MPLS services, with this the PE will mark the EXP bit accordingly the forwarding-class of the traffic, and on the P routers, this rule will guarantee that the packets will have the EXP bits marked. 
+To guarantee that packets are transmitted with the correct DSCP or EXP bits on the CORE interfaces, we use rewrite rules. With this configuration, the DSCP bit will be marked on network protocols and preserved as packets are routed. For MPLS services, the PE will mark the EXP bit according to the forwarding class, and on the P routers, this rule ensures the packets maintain their marked EXP bits.
 ```
 set class-of-service interfaces ge-0/0/2 unit 0 rewrite-rules dscp dscp-rewriter
 set class-of-service interfaces ge-0/0/2 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
@@ -398,17 +402,17 @@ set class-of-service interfaces ae0 unit 0 rewrite-rules dscp dscp-rewriter
 set class-of-service interfaces ae0 unit 0 rewrite-rules exp exp-rewriter protocol mpls-inet-both
 ```
 
-Now, our backbone is ready to receive the QoS services. To simulate a deploy of CoS, we'll use the Customer 3. Remembering the topology:
+Now, our backbone is ready to handle QoS services. To simulate a CoS deployment, we'll use Customer 3. Remembering the topology:
 <img width="1617" height="1097" alt="image" src="https://github.com/user-attachments/assets/e795421d-5647-49b9-920b-30106d30e3b1" />
 
-This customer will have two types of traffic, the normal vpn traffic, and the prioritary vpn traffic. See the table:
+This customer will have two types of traffic: normal VPN traffic and priority VPN traffic. See the table:
 ```
 | Type of Traffic | Criterion                    | Forwarding Class |
 | --------------- | ---------------------------- | ---------------- |
 | VPN normal      | DSCP 0B000000                | vpn              |
 | VPN prioritary  | Any other DSCP value         | vpn-priority     |
 ```
-The DSCP value is equal as the BE value of our configuration. So, we can go to the classifier. In the PE-CE interface, to classify two different forwarding-classes, we need to use a MF classifier:
+The DSCP value here is equal to our BE configuration. So, let's head to the classifier. On the PE-CE interface, to separate traffic into two different forwarding classes based on this criteria, we need to use an MF classifier:
 ```
 set firewall family inet filter classifier-c3 term 1 from dscp be
 set firewall family inet filter classifier-c3 term 1 then forwarding-class vpn
@@ -418,13 +422,13 @@ set firewall family inet filter classifier-c3 term 2 then accept
 
 set interfaces ge-0/0/8 unit 300 family inet filter input classifier-c3
 ```
-The configuration is intuitive, when the packets have the BE DSCP value, it belongs to vpn forwarding-class. And in the second term, all the packets belongs to the vpn-priority forwarding-class. 
+The configuration is intuitive: when packets have the BE DSCP value, they belong to the vpn forwarding class. The second term catches everything else, placing those packets into the vpn-priority forwarding class.
 
-With the actual configuration, the traffic of the customer will be treated in congestion or micro-bursts moments, having preference on the vpn-priority packets. But the CoS is not just this. We can split the traffic into the two LSPs between the PEs, accordingly the type of traffic and limit the traffic with policers also! 
+With our current configuration, the customer's traffic will be properly treated during congestion or micro-bursts, giving preference to vpn-priority packets. But CoS doesn't stop there! We can also split the traffic across the two LSPs between our PEs according to the traffic type, and even limit the traffic using policers!
 
-Our goal here is, forward the traffic of normal VPN trough LSPs B, and the prioritary VPN traffic trough LSPs A. And limit this traffic into the reserved bandwitdh by the LSP, that is 60Mbps, but, to differentiate the things, and to learn something more, the excedent traffic of the vpn-priority will be discarted, and the normal VPN this traffic will have a high loss-priority. 
+Our goal here is to forward normal VPN traffic through LSP B, and priority VPN traffic through LSP A. We also want to limit this traffic to the bandwidth reserved by the LSP (60Mbps). To make things interesting and learn a bit more, any excess vpn-priority traffic will be discarded, while excess normal vpn traffic will just be marked with a high loss priority.
 
-Starting with the LSP mapping: 
+Starting with the LSP mapping:
 R3:
 ```
 set class-of-service forwarding-policy next-hop-map lsp-map forwarding-class vpn lsp-next-hop R3-R8-B
@@ -445,9 +449,9 @@ set policy-options policy-statement load-balance-lsp term C3-LSP then cos-next-h
 
 set routing-options forwarding-table export load-balance-lsp
 ```
-We create a ```next-hop-map lsp-map``` in CoS configuration, ah call this on the policy applied on the forwarding-table. With this the traffic will be splitted accordingly. 
+We create a ```next-hop-map lsp-map``` in the CoS configuration, and call this map in the policy applied to the forwarding table. With this, the traffic will be split accordingly.
 
-Now, to limit this traffic and apply the rules, we need to create a policer and apply this on the LSP: 
+Now, to police this traffic and enforce the rules, we need to create policers and apply them to the LSPs:
 R3:
 ```
 set firewall policer vpn-priority-policer if-exceeding bandwidth-limit 60m
@@ -488,7 +492,7 @@ set firewall family any filter vpn-filter term 1 then accept
 
 set protocols mpls label-switched-path R8-R3-B policing filter vpn-filter
 ```
-And... our job is finished. Now, we need to test this: 
+And... our job is finished! Now, we need to test this:
 ```
 root@R3> show route forwarding-table destination 10.3.8.0/30
 ....
@@ -514,7 +518,7 @@ Destination        Type RtRef Next hop           Type Index    NhRef Netif
                               10.200.0.18       Push 19, Push 54, Push 110(top)      780     2 ge-0/0/2.0
                    idx:xx     10.200.0.18       Push 19, Push 103(top)      777     2 ge-0/0/2.0
 ```
-And in the customer perspective is here:
+And from the customer's perspective:
 ```
 [admin@CE3-1] > tool traceroute 10.3.3.2 dscp=000000
 Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
@@ -552,6 +556,6 @@ Columns: ADDRESS, LOSS, SENT, LAST, AVG, BEST, WORST, STD-DEV, STATUS
 4  10.3.8.1    0%       3  123ms    86.2  49.4  123    36.8
 5  10.3.8.2    0%       2  7ms      20.5  7     33.9   13.5
 ```
-On the traffic with BE DSCP, the routers forwards the traffic trough the LSPs A, and on the traffic with another DSCP value, the routers forwards the traffic trough LSPs B!!! It's so cool man. 
+For traffic with the BE DSCP, the routers forward the traffic through LSPs A. For traffic with any other DSCP value, the routers forward the traffic through LSPs B!!! It's so cool, man.
 
-With this, we finished our JNCIE-SP journey. I liked a lot to write all the artcles and sure, I learn so much here. Thank you for follow and read until here. See you soon. 
+With this, we have officially finished our JNCIE-SP journey. I really enjoyed writing all these articles, and I've certainly learned so much doing it. Thank you for following along and reading up to this point. See you soon!
